@@ -1,0 +1,14 @@
+# operating system and editor clutter
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
+.vscode/
+.idea/
+
+# exported results and scratch files
+beacon-log-*.csv
+*.bak
+*.tmp
+node_modules/

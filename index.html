@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QMX Beacon Monitor</title>
+<script>
+(function(){
+  var t=null; try{ t=localStorage.getItem('qmx-beacon-theme'); }catch(e){}
+  if(t!=='light'&&t!=='dark'){ t=(window.matchMedia&&matchMedia('(prefers-color-scheme: light)').matches)?'light':'dark'; }
+  document.documentElement.setAttribute('data-theme',t);
+})();
+</script>
+<style>
+:root{
+  --bg:#0e1116; --panel:#161b22; --panel2:#1c2330; --border:#2a3544;
+  --text:#d8e0ea; --text2:#8b9bb0; --accent:#4ea1ff; --accent2:#2d7fd6;
+  --green:#3fb950; --amber:#d29922; --red:#f85149;
+  --well:#0a0d12; --pill-on-b:#1f6f2e; --pill-off-b:#6e2b28;
+  --h0:#2a3544; --h1:#b3452f; --h2:#c07a1a; --h3:#9aa82a; --h4:#2f9e4b;
+  --map-bg:#0a0d12; --map-grid:#253041; --map-text:#8b9bb0;
+  color-scheme:dark;
+}
+:root[data-theme="light"]{
+  --bg:#f3f5f8; --panel:#ffffff; --panel2:#edf0f4; --border:#cdd5df;
+  --text:#1b2430; --text2:#57667a; --accent:#1f6fd1; --accent2:#1f6fd1;
+  --green:#1a7f37; --amber:#9a6700; --red:#cf222e;
+  --well:#e4e9ef; --pill-on-b:#8fcf9f; --pill-off-b:#eba4a8;
+  --h0:#dde3ea; --h1:#e0664a; --h2:#e8a23a; --h3:#b9c63d; --h4:#3fae5c;
+  --map-bg:#fbfcfe; --map-grid:#d5dde7; --map-text:#57667a;
+  color-scheme:light;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);
+  font-size:14px;padding:14px;max-width:1280px;margin:0 auto}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;
+  padding-bottom:12px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+h1{font-size:1.15rem;font-weight:600}
+h1 span{color:var(--accent)}
+.pill{font-size:.72rem;padding:3px 10px;border-radius:99px;border:1px solid var(--border);
+  background:var(--panel2);color:var(--text2);white-space:nowrap}
+.pill.on{color:var(--green);border-color:var(--pill-on-b)}
+.pill.off{color:var(--red);border-color:var(--pill-off-b)}
+.grid{display:grid;grid-template-columns:380px 1fr;gap:14px;align-items:start}
+@media(max-width:980px){.grid{grid-template-columns:1fr}}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px}
+.panel h2{font-size:.78rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text2);margin-bottom:12px;font-weight:600}
+.row{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.row:last-child{margin-bottom:0}
+label{font-size:.82rem;color:var(--text2);min-width:92px}
+select,input[type=text],input[type=number]{background:var(--panel2);color:var(--text);border:1px solid var(--border);
+  border-radius:5px;padding:6px 8px;font-size:.84rem;flex:1;min-width:90px}
+select:focus,input:focus{outline:none;border-color:var(--accent)}
+button{background:var(--accent2);color:#fff;border:none;border-radius:5px;padding:8px 14px;
+  font-size:.85rem;cursor:pointer;font-weight:500}
+button:hover{opacity:.87}
+button:disabled{opacity:.35;cursor:not-allowed}
+button.ghost{background:var(--panel2);border:1px solid var(--border);color:var(--text)}
+.theme-btn{background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:4px 10px;font-size:.78rem;border-radius:99px}
+.hint{font-size:.74rem;color:var(--text2);line-height:1.55;margin-top:8px}
+.mono{font-family:ui-monospace,"JetBrains Mono",monospace}
+.bandrow{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:.84rem}
+.bandrow:last-child{border-bottom:none}
+.bandrow .cov{margin-left:auto;font-size:.74rem}
+.cov.yes{color:var(--green)} .cov.no{color:var(--red)} .cov.unk{color:var(--text2)}
+.now{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+.now .big{font-size:1.25rem;font-weight:600}
+.now .sub{font-size:.8rem;color:var(--text2)}
+.bar{height:6px;background:var(--well);border-radius:3px;overflow:hidden;margin-top:8px}
+.bar>div{height:100%;background:var(--accent);width:0%}
+.lvl{height:10px;background:var(--well);border-radius:3px;overflow:hidden;flex:1;min-width:120px}
+.lvl>div{height:100%;width:0%;background:linear-gradient(90deg,var(--green),var(--amber),var(--red))}
+table.heat{border-collapse:collapse;width:100%;font-size:.78rem}
+table.heat th{font-weight:600;color:var(--text2);padding:4px 6px;text-align:left;font-size:.72rem}
+table.heat th.b{text-align:center}
+table.heat td{padding:3px 6px;border-top:1px solid var(--border);white-space:nowrap}
+table.heat td.c{text-align:center;border-radius:3px;min-width:52px}
+table.heat td.onair{color:var(--text2);min-width:62px}
+table.heat td.onair.on{color:var(--accent);font-weight:600}
+table.heat td.onair.mine::before{content:"▶ "}
+table.heat tr.cur td:not(.c){background:rgba(78,161,255,.12)}
+/* highlight the current row WITHOUT painting over its heat colours */
+table.heat tr.cur td.c{box-shadow:inset 0 0 0 2px var(--accent)}
+.c0{background:var(--h0);color:var(--text2)} .c1{background:var(--h1);color:#fff}
+.c2{background:var(--h2);color:#fff} .c3{background:var(--h3);color:#111} .c4{background:var(--h4);color:#fff}
+td.stale{opacity:.45}
+.legend{display:flex;gap:8px;flex-wrap:wrap;font-size:.72rem;color:var(--text2);margin-top:10px;align-items:center}
+.legend span{padding:2px 7px;border-radius:3px}
+canvas#map{width:100%;max-width:520px;aspect-ratio:1/1;display:block;margin:0 auto;border-radius:6px}
+</style>
+</head>
+<body>
+<header>
+  <h1>QMX <span>Beacon Monitor</span></h1>
+  <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+    <span class="pill off" id="audioPill">Audio idle</span>
+    <span class="pill off" id="catPill">CAT off</span>
+    <span class="pill" id="clockPill">UTC —</span>
+    <button class="theme-btn" id="themeBtn">☀ Light</button>
+  </div>
+</header>
+
+<div class="grid">
+<div>
+  <div class="panel">
+    <h2>Connections</h2>
+    <div class="row"><label for="inDev">Audio input</label>
+      <select id="inDev"><option value="">— click Start audio —</option></select></div>
+    <div class="row">
+      <button id="audioBtn">Start audio</button>
+      <button id="catBtn" class="ghost">Connect CAT</button>
+      <button id="catDisc" class="ghost" disabled>Disconnect</button>
+    </div>
+    <div class="hint">CAT is optional: without it, tune the radio yourself and use “Stay on one band”.</div>
+  </div>
+
+  <div class="panel">
+    <h2>Beacon bands</h2>
+    <div id="bandList"></div>
+    <div class="row" style="margin-top:10px">
+      <button id="detectBtn" class="ghost" disabled>Detect radio bands</button>
+      <span class="hint" id="detectMsg" style="margin:0"></span>
+    </div>
+    <div class="hint">Detection reads the radio's Band config table (read-only) and checks each beacon
+      frequency against your bands' min/max limits. Tick or untick to override.</div>
+  </div>
+
+  <div class="panel">
+    <h2>Monitor</h2>
+    <div class="row"><label for="locator">Your locator</label>
+      <input type="text" id="locator" placeholder="e.g. JO31ks" maxlength="6" class="mono"></div>
+    <div class="row"><label for="mode">Mode</label>
+      <select id="mode">
+        <option value="sweep">Sweep ticked bands (3 min each)</option>
+        <option value="stay">Stay on one band</option>
+      </select></div>
+    <div class="row" id="stayRow" style="display:none"><label for="stayBand">Band</label>
+      <select id="stayBand"></select></div>
+    <div class="row"><label for="pitch">CW pitch (Hz)</label>
+      <input type="number" id="pitch" value="700" min="300" max="1200" step="10"></div>
+    <div class="row"><label for="offset">Clock adj. (s)</label>
+      <input type="number" id="offset" value="0" step="0.05">
+      <button id="applyOff" class="ghost" disabled>Apply suggestion</button></div>
+    <div class="hint" id="timingMsg">Timing check appears after a few beacons are heard.</div>
+    <div class="row" style="margin-top:12px">
+      <button id="startBtn" disabled>Start monitoring</button>
+      <button id="stopBtn" class="ghost" disabled>Stop</button>
+    </div>
+  </div>
+</div>
+
+<div>
+  <div class="panel">
+    <h2>Now</h2>
+    <div class="now">
+      <div><div class="big mono" id="nowBand">—</div><div class="sub">band</div></div>
+      <div><div class="big" id="nowBeacon">—</div><div class="sub" id="nowLoc">beacon</div></div>
+      <div><div class="big mono" id="nowPath">—</div><div class="sub">bearing · distance</div></div>
+      <div style="flex:1;min-width:160px">
+        <div class="sub">signal at pitch</div>
+        <div class="lvl"><div id="lvlBar"></div></div>
+      </div>
+    </div>
+    <div class="bar"><div id="slotBar"></div></div>
+    <div class="hint" id="lastResult">Last result: —</div>
+  </div>
+
+  <div class="panel">
+    <h2>Propagation grid</h2>
+    <div style="overflow-x:auto"><table class="heat" id="heat"></table></div>
+    <div class="legend">
+      <span class="c1">100 W</span><span class="c2">10 W</span><span class="c3">1 W</span><span class="c4">0.1 W</span>
+      <span class="c0">not heard</span>
+      <span>— weakest dash heard; number = SNR of the 100 W dash in 2.5 kHz (dB, as WSJT-X and WSPR give it). QRM = interference on the frequency. Faded = older than 15 min.</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Map <span style="text-transform:none;letter-spacing:0;font-weight:400">— centred on you, true bearing and distance</span></h2>
+    <div class="row"><label for="mapBand">Show</label>
+      <select id="mapBand"><option value="best">Best of all bands</option></select></div>
+    <canvas id="map" width="1040" height="1040"></canvas>
+    <div class="row" style="margin-top:10px">
+      <button id="csvBtn" class="ghost">Export CSV</button>
+      <button id="clearBtn" class="ghost">Clear results</button>
+      <span class="hint" id="logCount" style="margin:0"></span>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════════════
+// === PURE LOGIC START ===  (no DOM — tested offline before shipping)
+// ════════════════════════════════════════════════════════════════════
+const BEACON_BANDS = [
+  { m:20, hz:14100000 }, { m:17, hz:18110000 }, { m:15, hz:21150000 },
+  { m:12, hz:24930000 }, { m:10, hz:28200000 }
+];
+// Rotation order is fixed by the NCDXF/IARU schedule: 4U1UN sends on 14.100
+// at hh:00:00, VE8AT at hh:00:10, and so on; each beacon then steps up one
+// band every 10 s (20m -> 17m -> 15m -> 12m -> 10m).
+const BEACONS = [
+  ['4U1UN','United Nations, New York',40.75,-73.97],
+  ['VE8AT','Inuvik, NT',68.36,-133.72],
+  ['W6WX','Mt Umunhum, California',37.16,-121.90],
+  ['KH6RS','Maui, Hawaii',20.75,-156.43],
+  ['ZL6B','Masterton, New Zealand',-41.06,175.58],
+  ['VK6RBP','Rolystone, W. Australia',-32.11,116.05],
+  ['JA2IGY','Mt Asama, Japan',34.46,136.78],
+  ['RR9O','Novosibirsk, Russia',54.98,82.90],
+  ['VR2B','Hong Kong',22.27,114.15],
+  ['4S7B','Colombo, Sri Lanka',6.89,79.86],
+  ['ZS6DN','Pretoria, South Africa',-25.90,28.27],
+  ['5Z4B','Kiambu, Kenya',-1.02,37.06],
+  ['4X6TU','Tel Aviv, Israel',32.06,34.81],
+  ['OH2B','Lohja, Finland',60.32,24.83],
+  ['CS3B','Madeira',32.82,-17.20],
+  ['LU4AA','Buenos Aires, Argentina',-34.62,-58.44],
+  ['OA4B','Lima, Peru',-12.07,-76.95],
+  ['YV5B','Caracas, Venezuela',10.42,-66.84]
+].map(([call,loc,lat,lon])=>({call,loc,lat,lon}));
+
+// 86400 is a multiple of 180, so slot boundaries align with UTC midnight and
+// integer arithmetic on epoch milliseconds is exact.
+function slotOf(epochMs){
+  const n = Math.floor(epochMs/10000);
+  return { slot: ((n%18)+18)%18, startMs: n*10000, inSlot:(epochMs - n*10000)/1000,
+           cyclePos: (((epochMs/1000)%180)+180)%180 };
+}
+function beaconAt(bandIdx, slot){ return ((slot - bandIdx)%18 + 18)%18; }
+
+function locToLatLon(loc){
+  loc = String(loc||'').trim().toUpperCase();
+  if(!/^[A-R]{2}[0-9]{2}([A-X]{2})?$/.test(loc)) return null;
+  let lon = (loc.charCodeAt(0)-65)*20 - 180 + (+loc[2])*2;
+  let lat = (loc.charCodeAt(1)-65)*10 - 90  + (+loc[3]);
+  if(loc.length===6){
+    lon += (loc.charCodeAt(4)-65)*(5/60) + 2.5/60;
+    lat += (loc.charCodeAt(5)-65)*(2.5/60) + 1.25/60;
+  } else { lon += 1; lat += 0.5; }
+  return {lat, lon};
+}
+function greatCircle(a, b){
+  const r=Math.PI/180, R=6371;
+  const p1=a.lat*r, p2=b.lat*r, dl=(b.lon-a.lon)*r;
+  const h=Math.sin((p2-p1)/2)**2 + Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;
+  const km = 2*R*Math.asin(Math.min(1,Math.sqrt(h)));
+  const y=Math.sin(dl)*Math.cos(p2), x=Math.cos(p1)*Math.sin(p2)-Math.sin(p1)*Math.cos(p2)*Math.cos(dl);
+  return { km, brg: ((Math.atan2(y,x)/r)+360)%360 };
+}
+
+// ── Band config discovery over the QMX "MM" menu protocol (READ-ONLY) ──
+// catFn(cmd) -> Promise<string|null>: response without trailing ';', null on '?' or timeout.
+function parseDiscover(resp){
+  if(!resp) return null;
+  const body = resp.startsWith('MM') ? resp.slice(2) : resp;
+  const parts = body.split('|');
+  if(parts.length < 3) return null;
+  let name = parts.slice(2).join('|'), cols = null;
+  const cm = name.match(/^(.+)\[(\d+)\]$/);
+  if(cm){ name = cm[1]; cols = parseInt(cm[2],10); }
+  return { type: parseInt(parts[0],10), listType: parseInt(parts[1],10), name, cols };
+}
+function parseHz(v){
+  if(v===null || v===undefined) return null;
+  const m = String(v).match(/[\d.]+/); if(!m) return null;
+  const n = parseFloat(m[0]); if(!isFinite(n) || n<=0) return null;
+  if(n >= 1e6) return Math.round(n);        // Hz
+  if(n >= 1e3) return Math.round(n*1e3);    // kHz
+  return Math.round(n*1e6);                 // MHz
+}
+async function discoverBands(catFn, onProgress){
+  const disc = async path => parseDiscover(await catFn('MM'+path+'?;'));
+  const isGrid = it => it && it.type===0 && it.cols!==null && /band/i.test(it.name);
+  let grid = null;
+  for(let i=0;i<40 && !grid;i++){
+    const it = await disc(String(i)); if(!it) break;
+    if(onProgress) onProgress(it.name);
+    if(isGrid(it)){ grid={path:String(i), cols:it.cols}; break; }
+    if(it.type===0 && it.cols===null){
+      for(let j=0;j<40;j++){
+        const sub = await disc(i+'|'+j); if(!sub) break;
+        if(isGrid(sub)){ grid={path:i+'|'+j, cols:sub.cols}; break; }
+      }
+    }
+  }
+  if(!grid) return null;
+  const rows=[];
+  for(let r=0;r<40;r++){ const it = await disc(grid.path+'|'+r); if(!it) break; rows.push(it.name); }
+  const find = re => rows.find(n=>re.test(n));
+  const rName = find(/band\s*name/i), rMin = find(/frequency\s*min/i), rMax = find(/frequency\s*max/i);
+  const get = async (row,c) => row ? await catFn('MM'+grid.path+'|'+row+'['+c+'];') : null;
+  const strip = v => v===null ? null : (v.startsWith('MM') ? v.slice(2) : v);
+  const bands=[];
+  for(let c=0;c<grid.cols;c++){
+    const name = strip(await get(rName,c));
+    bands.push({ name: name ? name.trim() : null,
+                 min: parseHz(strip(await get(rMin,c))), max: parseHz(strip(await get(rMax,c))) });
+  }
+  return { count: grid.cols, bands };
+}
+// A beacon band is covered if its frequency lies inside a configured band's
+// min/max; if the radio did not report limits, fall back to the band name.
+function coverage(radioBands){
+  return BEACON_BANDS.map(bb=>{
+    const byRange = radioBands.find(b=>b.min && b.max && bb.hz>=b.min && bb.hz<=b.max);
+    if(byRange) return { covered:true, via:byRange };
+    const anyRange = radioBands.some(b=>b.min && b.max);
+    const byName = radioBands.find(b=>b.name && parseFloat(b.name)===bb.m);
+    if(!anyRange && byName) return { covered:true, via:byName };
+    return { covered:false, via:null };
+  });
+}
+// === PURE LOGIC END ===
+
+// ════════════════════════════════════════════════════════════════════
+// Audio worklet: passes the receiver audio (8 kHz) on in 1024-sample blocks,
+// each stamped with the audio clock time of its first sample
+// ════════════════════════════════════════════════════════════════════
+const WORKLET_SRC = `
+class RawTap extends AudioWorkletProcessor{
+  constructor(){ super(); this.b=new Float32Array(1024); this.n=0; this.t0=0; }
+  process(inputs){
+    const x=inputs[0] && inputs[0][0];
+    if(!x) return true;
+    for(let i=0;i<x.length;i++){
+      if(this.n===0) this.t0=currentTime + i/sampleRate;
+      this.b[this.n++]=x[i];
+      if(this.n===1024){ this.port.postMessage({ at:this.t0, x:this.b }, [this.b.buffer]); this.b=new Float32Array(1024); this.n=0; }
+    }
+    return true;
+  }
+}
+registerProcessor('beacon-tap', RawTap);
+`;
+
+// ════════════════════════════════════════════════════════════════════
+// The detector, run in a worker so the page never stalls. Its source is kept
+// here as text; the worker is started from a data: URL, which also works when
+// the page is opened from disk.
+//
+// Method: each slot's audio is mixed down around the CW pitch and searched for
+// the beacon it must be, from the schedule: its callsign at 22 WPM followed by
+// a one-second dash, matched in narrow bandwidths (a dit's worth for the
+// callsign, 4 Hz for the dash) over +-100 Hz of tone and +-1 s of timing.
+// Then checks against interference (silence before and after, the callsign's
+// gaps, the power stepping down) and each later dash measured in 4 Hz.
+// ════════════════════════════════════════════════════════════════════
+const DETECTOR_SRC = String.raw`// analyseRaw(x, t0, call, opts) — x: Float32Array of receiver audio at 8 kHz,
+// whose first sample is t0 seconds from the slot start; call: the beacon
+// expected in this slot. Returns { heard, snr, dashes, onset, df, period, z }.
+
+const MORSE = {A:'.-',B:'-...',C:'-.-.',D:'-..',E:'.',F:'..-.',G:'--.',H:'....',I:'..',J:'.---',K:'-.-',L:'.-..',
+  M:'--',N:'-.',O:'---',P:'.--.',Q:'--.-',R:'.-.',S:'...',T:'-',U:'..-',V:'...-',W:'.--',X:'-..-',Y:'-.--',Z:'--..',
+  0:'-----',1:'.----',2:'..---',3:'...--',4:'....-',5:'.....',6:'-....',7:'--...',8:'---..',9:'----.'};
+const DIT = 1.2 / 22;                     // 22 WPM
+
+// The callsign as on (key down) and off (gap) elements, times in dits from its start.
+function callElements(call){
+  const on = [], off = []; let t = 0;
+  [...call].forEach((ch, ci) => {
+    const c = MORSE[ch];
+    for (let k = 0; k < c.length; k++){
+      const d = c[k] === '.' ? 1 : 3;
+      on.push([t, d]); t += d;
+      if (k < c.length - 1){ off.push([t, 1]); t += 1; }
+    }
+    if (ci < call.length - 1){ off.push([t, 3]); t += 3; }
+  });
+  return { on, off, len: t };
+}
+
+// Receiver audio (8 kHz) -> complex baseband around the pitch, 2 kHz sample rate.
+const FS = 8000, DEC = 4, FSB = FS / DEC, NTAP = 101;
+const LP = (() => {                       // Blackman windowed sinc, cutoff 250 Hz
+  const h = new Float64Array(NTAP), M = (NTAP - 1) / 2, fc = 250 / FS; let s = 0;
+  for (let n = 0; n < NTAP; n++){
+    const k = n - M, sinc = k === 0 ? 2 * fc : Math.sin(2 * Math.PI * fc * k) / (Math.PI * k);
+    const w = 0.42 - 0.5 * Math.cos(2 * Math.PI * n / (NTAP - 1)) + 0.08 * Math.cos(4 * Math.PI * n / (NTAP - 1));
+    h[n] = sinc * w; s += h[n];
+  }
+  for (let n = 0; n < NTAP; n++) h[n] /= s;
+  return h;
+})();
+function baseband(x, pitch){
+  const n = x.length, re = new Float64Array(n), im = new Float64Array(n), w = 2 * Math.PI * pitch / FS;
+  for (let i = 0; i < n; i++){ re[i] = x[i] * Math.cos(w * i); im[i] = -x[i] * Math.sin(w * i); }
+  const M = (NTAP - 1) / 2, m = Math.floor((n - NTAP) / DEC) + 1;
+  const zr = new Float64Array(m), zi = new Float64Array(m);
+  for (let j = 0; j < m; j++){
+    let a = 0, b = 0; const o = j * DEC;
+    for (let k = 0; k < NTAP; k++){ a += LP[k] * re[o + k]; b += LP[k] * im[o + k]; }
+    zr[j] = a; zi[j] = b;
+  }
+  return { zr, zi, t0off: M / FS };        // output j is centred on input sample j*DEC + M
+}
+
+// Energy of the coherent sum over [a, a+L) of z mixed down by df, for all a,
+// through prefix sums: E(a, L) = |P[a+L] - P[a]|^2.
+function prefix(zr, zi, df){
+  const n = zr.length, pr = new Float64Array(n + 1), pi = new Float64Array(n + 1);
+  const w = -2 * Math.PI * df / FSB;
+  let c = 1, s = 0; const cw = Math.cos(w), sw = Math.sin(w);
+  for (let i = 0; i < n; i++){
+    const r = zr[i] * c - zi[i] * s, q = zr[i] * s + zi[i] * c;
+    pr[i + 1] = pr[i] + r; pi[i + 1] = pi[i] + q;
+    const c2 = c * cw - s * sw; s = c * sw + s * cw; c = c2;
+    if ((i & 1023) === 1023){ const g = 1 / Math.hypot(c, s); c *= g; s *= g; }   // keep the phasor on the unit circle
+  }
+  return { pr, pi };
+}
+const energy = (P, a, L) => { const r = P.pr[a + L] - P.pr[a], q = P.pi[a + L] - P.pi[a]; return r * r + q * q; };
+
+function median(a){ const s = Float64Array.from(a).sort(); return s.length ? s[s.length >> 1] : 0; }
+
+const DF_MAX = 100, DF_STEP = 1;
+const SUB = 0.25;                          // a dash is measured as four coherent 0.25 s pieces
+const Z_HEARD_KNOWN = 5.5;                 // ...and with timing and tone known (see tests)
+const Z_HEARD = 6.5;                       // detection threshold: noise alone reached 6.03 at most in 300 slots
+const DASH_T = 7.0;                        // sum(e-1) over a dash's 4 pieces: noise exceeds this 0.15% of the time
+
+function analyseRaw(x, t0, call, opts = {}){
+  const pitch = opts.pitch || 700;
+  // What earlier slots have taught: every NCDXF beacon is GPS-timed, so all of
+  // them start their callsign at the same moment relative to the PC clock; and
+  // on one band all of them arrive at the same tone, set by the rig's own
+  // frequency error. Once known, searching only near those values leaves far
+  // fewer chances for noise or interference to fit, and a lower bar for weak
+  // beacons. opts.tau / opts.df: [lo, hi], or undefined to search everything.
+  const learnedP = opts.period || null;    // dash spacing learned from strong beacons, if known
+  if (x.length < FS * 9) return null;
+  const { zr, zi, t0off } = baseband(x, pitch);
+  const n = zr.length;
+  const tOf = j => t0 + t0off + j / FSB;              // time (s from slot start) of baseband sample j
+  const jOf = t => Math.round((t - t0 - t0off) * FSB);
+
+  const Ld = Math.max(1, Math.round(DIT * FSB));      // 109 samples ~ 54.5 ms
+  const Ls = Math.round(SUB * FSB);                   // 500 samples
+  const el = callElements(call);
+  const Tcall = el.len * DIT;
+  const dfs = []; for (let d = -DF_MAX; d <= DF_MAX; d += DF_STEP) dfs.push(d);
+  const kIn = k => !opts.df || (dfs[k] >= opts.df[0] && dfs[k] <= opts.df[1]);
+  const zNeed = (opts.tau && opts.df) ? Z_HEARD_KNOWN : Z_HEARD;
+
+  // The noise level at each frequency, from a Welch spectrum of the whole slot
+  // (Hann segments of 0.256 s, half overlapped): median over segments, then a
+  // running median across +-40 Hz, so neither the beacon's keying (it is on for
+  // part of the slot) nor its own spectral skirts raise the estimate. Phi is in
+  // "per sample" units: a rectangular window of L samples then has mean noise
+  // energy L * Phi, whatever its length.
+  const SEG = 512, hann = new Float64Array(SEG); let w2 = 0;
+  for (let i = 0; i < SEG; i++){ hann[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / SEG); w2 += hann[i] * hann[i]; }
+  const phiRaw = new Float64Array(dfs.length);
+  for (let k = 0; k < dfs.length; k++){
+    const w = -2 * Math.PI * dfs[k] / FSB, cw = Math.cos(w), sw = Math.sin(w), v = [];
+    for (let a = 0; a + SEG <= n; a += SEG / 2){
+      let r = 0, q = 0, c = 1, s = 0;
+      for (let i = 0; i < SEG; i++){
+        const xr = zr[a + i] * hann[i], xi = zi[a + i] * hann[i];
+        r += xr * c - xi * s; q += xr * s + xi * c;
+        const c2 = c * cw - s * sw; s = c * sw + s * cw; c = c2;
+      }
+      v.push((r * r + q * q) / w2);
+    }
+    phiRaw[k] = median(v) / Math.LN2;
+  }
+  const phi = Array.from(phiRaw, (_, i) => median(phiRaw.slice(Math.max(0, i - 40), i + 41)));
+  let Pcur = null;
+  const e = (k, a, L) => energy(Pcur, a, L) / (L * phi[k]);          // ~ Exp(1) under noise
+
+  // Template: callsign on/off elements, then the gap, then the 100 W dash as
+  // four 0.25 s pieces. Score = sum L*(e-1) over on-elements, minus the off
+  // elements scaled so a steady carrier scores zero.
+  const onEl = el.on.map(([s, d]) => [s * DIT, d === 1 ? Ld : 3 * Ld]);
+  const offEl = el.off.filter(([, d]) => d === 3).map(([s]) => [s * DIT, 3 * Ld]);
+  offEl.push([-0.3, Math.round(0.25 * FSB)]);          // quiet before the callsign
+  const dashOn = [0, 1, 2, 3].map(q => [0.03 + q * 0.235, Ls]);   // 4 x 0.25 s inside a 1 s dash
+  const sumOn2 = onEl.reduce((s, [, L]) => s + L * L, 0) + 4 * Ls * Ls;
+  const sumOff2 = offEl.reduce((s, [, L]) => s + L * L, 0);
+  const beta = sumOn2 / sumOff2;
+  const sd = Math.sqrt(sumOn2 + beta * beta * sumOff2);
+
+  const tauMin = opts.tau ? opts.tau[0] : -0.8, tauMax = opts.tau ? opts.tau[1] : 1.5, step = 0.005;
+  const gMin = 0.10, gMax = 1.20, gStep = 0.025;
+  // Stage 1: for each frequency, the best alignment of the template (time and
+  // the callsign-to-dash gap), scored against the noise level.
+  const byK = [];
+  for (let k = 0; k < dfs.length; k++){
+    if (!kIn(k)){ byK.push({ z: -Infinity, k }); continue; }
+    Pcur = prefix(zr, zi, dfs[k]);
+    const dStart = tauMin + Tcall + gMin, dEnd = tauMax + Tcall + gMax;
+    const nD = Math.round((dEnd - dStart) / step) + 1, D = new Float64Array(nD);
+    for (let i = 0; i < nD; i++){
+      const ts = dStart + i * step; let s = 0;
+      for (const [o, L] of dashOn){ const a = jOf(ts + o); if (a < 0 || a + L > n){ s = -Infinity; break; } s += L * (e(k, a, L) - 1); }
+      D[i] = s;
+    }
+    let bk = { z: -Infinity, k };
+    for (let tau = tauMin; tau <= tauMax + 1e-9; tau += step){
+      let s = 0, ok = true;
+      for (const [o, L] of onEl){ const a = jOf(tau + o); if (a < 0 || a + L > n){ ok = false; break; } s += L * (e(k, a, L) - 1); }
+      if (!ok) continue;
+      let off = 0;
+      for (const [o, L] of offEl){ const a = jOf(tau + o); if (a < 0 || a + L > n){ ok = false; break; } off += L * (e(k, a, L) - 1); }
+      if (!ok) continue;
+      s -= beta * off;
+      let bd = -Infinity, bg = 0;
+      for (let g = gMin; g <= gMax + 1e-9; g += gStep){
+        const i = Math.round((tau + Tcall + g - dStart) / step);
+        if (i >= 0 && i < nD && D[i] > bd){ bd = D[i]; bg = g; }
+      }
+      const z = (s + bd) / sd;
+      if (z > bk.z) bk = { z, k, tau, g: bg, S: s + bd };
+    }
+    byK.push(bk);
+  }
+
+  // Stage 2: is it the beacon, or interference? Stage 1 scores energy against
+  // the noise level, so a steady carrier or someone else's CW can score well
+  // too. What sets the beacon apart is silence around its transmission: before
+  // its callsign (the previous beacon on this frequency has finished) and after
+  // its last dash, until the next beacon. Interference is there then as well.
+  // So measure that silence with the same 0.25 s pieces as the 100 W dash: if
+  // it holds energy both clearly above the noise and comparable with the dash,
+  // this frequency is taken by something else.
+  const gate = (k, tau, g) => {
+    const d1 = tau + Tcall + g, lastEnd = d1 + 3 * (learnedP || 1.6) + 1.0;
+    const pieces = [];
+    for (let t = Math.max(tOf(0) + 0.01, tau - 0.8); t + SUB <= tau - 0.05; t += SUB) pieces.push(t);
+    for (let t = lastEnd + 0.1; t + SUB <= Math.min(9.9, tOf(n - Ls - 1)); t += SUB) pieces.push(t);
+    const qa = pieces.map(jOf).filter(a => a >= 0 && a + Ls <= n);
+    const dv = dashOn.map(([o, L]) => { const a = jOf(d1 + o); return a >= 0 && a + L <= n ? energy(Pcur, a, L) / (L * phi[k]) : 1; });
+    const ed = dv.reduce((x, y) => x + y, 0) / dv.length;
+    // the silence is checked here and up to 15 Hz either side, so the skirt of
+    // a strong signal nearby cannot pass for a weak beacon
+    let worst = 1;
+    for (let kk = Math.max(0, k - 15); kk <= Math.min(dfs.length - 1, k + 15); kk++){
+      const Pk = kk === k ? Pcur : prefix(zr, zi, dfs[kk]);
+      const eq = qa.length ? qa.reduce((s, a) => s + energy(Pk, a, Ls) / (Ls * phi[kk]), 0) / qa.length : 1;
+      if (eq > worst) worst = eq;
+    }
+    let busy = qa.length > 0 && (worst - 1) > 3 / Math.sqrt(qa.length) && (worst - 1) > 0.15 * (ed - 1);
+    // And the callsign itself: its keyed dit-lengths against its gaps, judged by
+    // their own spread (a two-sample t statistic). Interference aligned by
+    // chance rarely matches a whole callsign.
+    const on = [], off = [];
+    for (const [s0, d] of el.on) for (let u = 0; u < d; u++) on.push(tau + (s0 + u) * DIT);
+    for (const [s0, d] of el.off) for (let u = 0; u < d; u++) off.push(tau + (s0 + u) * DIT);
+    for (let t = Math.max(tOf(0) + 0.01, tau - 0.8); t + DIT <= tau - 0.04; t += DIT) off.push(t);
+    const vals = ts => ts.map(jOf).filter(a => a >= 0 && a + Ld <= n).map(a => energy(Pcur, a, Ld) / (Ld * phi[k]));
+    const st = v => { const m = v.reduce((x, y) => x + y, 0) / v.length; return { m, v: v.reduce((x, y) => x + (y - m) ** 2, 0) / Math.max(1, v.length - 1), n: v.length }; };
+    const A = st(vals(on)), B = st(vals(off));
+    const tcall = (A.m - B.m) / Math.sqrt(A.v / A.n + B.v / B.n + 1e-12);
+    // The beacon steps its power down: the second after its 100 W dash (at any
+    // plausible spacing) holds much less energy. Interference usually does not.
+    const pieceSum = t0 => { let s = 0; for (const [o, L] of dashOn){ const a = jOf(t0 + o); if (a < 0 || a + L > n) return null; s += energy(Pcur, a, L) / (L * phi[k]) - 1; } return s; };
+    const s1 = pieceSum(d1); let s2 = Infinity;
+    for (let P = 1.0; P <= 1.6 + 1e-9; P += 0.05){ const v = pieceSum(d1 + P); if (v !== null && v < s2) s2 = v; }
+    const notStepping = s1 !== null && isFinite(s2) && s2 > 0.35 * s1;
+    busy = busy || tcall < 2.0 || notStepping;
+    return { busy, quiet: +worst.toFixed(2), dash: +ed.toFixed(2), n: qa.length, tcall: +tcall.toFixed(2), step: s1 ? +(s2 / s1).toFixed(2) : null };
+  };
+  const cands = byK.filter(c => isFinite(c.z) && c.z >= zNeed).sort((x, y) => y.z - x.z);
+  let best = null, why = null;
+  for (const c of cands.slice(0, 12)){
+    Pcur = prefix(zr, zi, dfs[c.k]);
+    const gt = gate(c.k, c.tau, c.g);
+    if (gt.busy){ why = why || Object.assign({ df: dfs[c.k] }, gt); continue; }
+    best = Object.assign({ gate: gt }, c); break;
+  }
+  const zTop = Math.max(...byK.filter(c => isFinite(c.z)).map(c => c.z), -99);
+  const res = { heard: false, snr: null, dashes: 0, onset: null, df: null, period: null, z: +zTop.toFixed(2) };
+  if (why) res.interference = why;
+  if (!best) return res;
+
+
+  // Refine the tone to 0.25 Hz on the 100 W dash, then measure each dash.
+  const k0 = best.k, d1 = best.tau + Tcall + best.g;
+  let fBest = dfs[k0], eBest = -1;
+  for (let f = dfs[k0] - 1.5; f <= dfs[k0] + 1.5 + 1e-9; f += 0.25){
+    const Pf = prefix(zr, zi, f); let s = 0;
+    for (const [o, L] of dashOn){ const a = jOf(d1 + o); s += energy(Pf, a, L); }
+    if (s > eBest){ eBest = s; fBest = f; }
+  }
+  const Pf = prefix(zr, zi, fBest);
+  const nz = phi[k0];
+  const dashE = ts => { let s = 0; for (const [o, L] of dashOn){ const a = jOf(ts + o); if (a < 0 || a + L > n) return null; s += energy(Pf, a, L) / (L * nz) - 1; } return s; };
+  const e1 = dashE(d1);
+  res.heard = true; res.dashes = 1; res.onset = +best.tau.toFixed(3); res.df = +fBest.toFixed(2); res.gate = best.gate;
+  res.snr = +(10 * Math.log10(Math.max(e1 / 4, 1e-3)) + SNR_K).toFixed(1);
+
+  // Dash 2: spacing from the learned value if we have one, else searched.
+  const Ps = []; if (learnedP) for (let p = learnedP - 0.04; p <= learnedP + 0.04 + 1e-9; p += 0.01) Ps.push(p);
+  else for (let p = 1.0; p <= 1.6 + 1e-9; p += 0.01) Ps.push(p);
+  let bP = null, bE = -Infinity;
+  for (const p of Ps){ const v = dashE(d1 + p); if (v !== null && v > bE){ bE = v; bP = p; } }
+  const T2 = learnedP ? DASH_T : DASH_T + 2.5;          // searching 61 spacings needs a higher bar (noise max 10.8 in 200)
+  if (bP === null || bE < T2 || bE > e1 * 0.5) return res;  // must be clearly weaker than dash 1 (nominally -10 dB)
+  res.dashes = 2; res.period = +bP.toFixed(2);
+  let prev = bE;
+  for (let q = 2; q <= 3; q++){
+    const v = dashE(d1 + q * bP);
+    if (v === null || v < DASH_T || v > prev * 0.5) break;
+    res.dashes = q + 1; prev = v;
+  }
+  return res;
+}
+let SNR_K = -27.0;                              // calibration: 10log10(e-1 per piece) -> SNR in 2.5 kHz
+function setSnrK(k){ SNR_K = k; }
+
+
+onmessage = e => {
+  const { id, x, t0, call, opts } = e.data;
+  let r = null;
+  try { r = analyseRaw(x, t0, call, opts); } catch (err) { r = { error: String(err) }; }
+  postMessage({ id, r });
+};
+`;
+let detector = null, detId = 0; const detWait = new Map();
+function detect(x, t0, call, opts){
+  if(!detector){
+    detector = new Worker('data:text/javascript;charset=utf-8,' + encodeURIComponent(DETECTOR_SRC));
+    detector.onmessage = e => { const f = detWait.get(e.data.id); detWait.delete(e.data.id); if(f) f(e.data.r); };
+  }
+  return new Promise(res => { const id = ++detId; detWait.set(id, res); detector.postMessage({ id, x, t0, call, opts }, [x.buffer]); });
+}
+
+// ════════════════════════════════════════════════════════════════════
+// App
+// ════════════════════════════════════════════════════════════════════
+const $ = id => document.getElementById(id);
+const LS_KEY='qmx-beacon-state';
+let ctx=null, node=null, stream=null;
+let chunks=[];                        // rolling buffer of receiver audio: { e: epoch ms of first sample (clock-adjusted), x }
+let monitoring=false, tickTimer=null;
+let lastSlotN=null, pendingSlots=[];  // slots awaiting analysis
+let curBandIdx=null, tuneAtEpoch=0;
+let results={};                       // key `${beacon}|${band}` -> latest result
+let log=[];                           // result history for CSV
+let onsets=[];                        // recent callsign start times of strong beacons (s into slot)
+let learn={ df:{}, periods:[] };      // tone offset per band and dash spacing, learned from strong beacons
+let sweepQueue=[];
+let radioCoverage=null;
+
+function clockOffsetMs(){ return (parseFloat($('offset').value)||0)*1000; }
+function nowUtc(){ return Date.now() + clockOffsetMs(); }
+function setPill(id,cls,text){ const e=$(id); e.className='pill '+(cls||''); e.textContent=text; }
+
+// ── Persistence ──────────────────────────────────────────────────────
+function saveState(){
+  try{
+    localStorage.setItem(LS_KEY, JSON.stringify({
+      locator:$('locator').value, pitch:$('pitch').value, offset:$('offset').value,
+      mode:$('mode').value, stay:$('stayBand').value,
+      ticks: BEACON_BANDS.map((_,i)=>$('bb'+i).checked),
+      results, log: log.slice(-5000), learn, onsets
+    }));
+  }catch(e){}
+}
+function loadState(){
+  try{
+    const s=JSON.parse(localStorage.getItem(LS_KEY)||'null'); if(!s) return;
+    if(s.locator) $('locator').value=s.locator;
+    if(s.pitch) $('pitch').value=s.pitch;
+    if(s.offset!==undefined) $('offset').value=s.offset;
+    if(s.mode) $('mode').value=s.mode;
+    if(s.stay!==undefined) $('stayBand').value=s.stay;
+    if(Array.isArray(s.ticks)) s.ticks.forEach((v,i)=>{ const e=$('bb'+i); if(e) e.checked=!!v; });
+    results=s.results||{}; log=s.log||[];
+    if(s.learn) learn=s.learn; if(Array.isArray(s.onsets)) onsets=s.onsets;
+    // Results from before the new detector gave SNR in its ~70 Hz analysis
+    // bandwidth; convert them to 2.5 kHz, as reported now.
+    const conv=r=>{ if(r && r.bw!==2500){ if(r.snr!==null && r.snr!==undefined) r.snr=+(r.snr-15.5).toFixed(1); r.bw=2500; } };
+    Object.values(results).forEach(conv); log.forEach(conv);
+  }catch(e){}
+}
+
+// ── Band list UI ─────────────────────────────────────────────────────
+function buildBandList(){
+  $('bandList').innerHTML = BEACON_BANDS.map((b,i)=>`
+    <div class="bandrow">
+      <input type="checkbox" id="bb${i}" checked>
+      <label for="bb${i}" style="min-width:auto;color:var(--text)"><b>${b.m} m</b>
+        <span class="mono" style="color:var(--text2)">${(b.hz/1e6).toFixed(3)} MHz</span></label>
+      <span class="cov unk" id="cov${i}">not checked</span>
+    </div>`).join('');
+  $('stayBand').innerHTML = BEACON_BANDS.map((b,i)=>`<option value="${i}">${b.m} m — ${(b.hz/1e6).toFixed(3)} MHz</option>`).join('');
+  $('mapBand').innerHTML = '<option value="best">Best of all bands</option>' +
+    BEACON_BANDS.map((b,i)=>`<option value="${i}">${b.m} m</option>`).join('');
+  BEACON_BANDS.forEach((_,i)=>$('bb'+i).addEventListener('change',saveState));
+}
+function showCoverage(cov){
+  cov.forEach((c,i)=>{
+    const el=$('cov'+i);
+    if(c.covered){
+      const v=c.via; const rng = (v.min&&v.max) ? ` ${(v.min/1e6).toFixed(3)}–${(v.max/1e6).toFixed(3)}` : '';
+      el.className='cov yes'; el.textContent='✓ radio band '+(v.name||'?')+(v.name?' m':'')+rng;
+      $('bb'+i).checked=true;
+    } else {
+      el.className='cov no'; el.textContent='✗ not covered by this radio';
+      $('bb'+i).checked=false;
+    }
+  });
+  saveState();
+}
+
+// ── CAT: one serialised request/response queue ───────────────────────
+// Discovery needs replies matched to requests, so every command goes through
+// one queue and waits for its own answer. Stale replies are dropped by
+// checking the command prefix. Nothing but FA and MD is ever SET, and never
+// any MM menu item.
+let port=null, reader=null, keepReading=false, rxBuf='', pending=null, qChain=Promise.resolve();
+function catQuery(cmd, expect=true, timeout=300){
+  const run = () => new Promise(async resolve=>{
+    if(!port || !port.writable){ resolve(null); return; }
+    let timer=null;
+    if(expect){
+      pending={ prefix: cmd.slice(0,2), done: r=>{ clearTimeout(timer); pending=null; resolve(r); } };
+      timer=setTimeout(()=>{ pending=null; resolve(null); }, timeout);
+    }
+    try{ const w=port.writable.getWriter(); await w.write(new TextEncoder().encode(cmd)); w.releaseLock(); }
+    catch(e){ if(expect){ clearTimeout(timer); pending=null; } resolve(null); return; }
+    if(!expect) setTimeout(()=>resolve(''), 40);
+  });
+  const p = qChain.then(run, run); qChain = p.catch(()=>{}); return p;
+}
+async function readLoop(){
+  try{
+    reader = port.readable.getReader();
+    while(keepReading){
+      const {value,done} = await reader.read(); if(done) break;
+      rxBuf += new TextDecoder().decode(value);
+      let i;
+      while((i=rxBuf.indexOf(';'))>=0){
+        const tok = rxBuf.slice(0,i).trim(); rxBuf = rxBuf.slice(i+1);
+        if(!pending) continue;
+        if(tok==='?') pending.done(null);
+        else if(tok.startsWith(pending.prefix)) pending.done(tok);
+      }
+    }
+  }catch(e){}
+}
+async function catConnect(){
+  if(!('serial' in navigator)){ alert('Web Serial needs Chrome or Edge.'); return; }
+  try{
+    port = await navigator.serial.requestPort();
+    // The QMX is a native USB CDC device and ignores the baud rate, but Web
+    // Serial's open() requires one.
+    await port.open({ baudRate:115200 });
+    keepReading=true; readLoop();
+    setPill('catPill','on','CAT open');
+    $('catBtn').disabled=true; $('catDisc').disabled=false; $('detectBtn').disabled=false;
+  }catch(e){ setPill('catPill','off','CAT failed'); }
+}
+async function catDisconnect(){
+  keepReading=false;
+  try{ if(reader){ await reader.cancel(); reader.releaseLock(); reader=null; } }catch(e){}
+  try{ if(port){ await port.close(); port=null; } }catch(e){}
+  setPill('catPill','off','CAT off');
+  $('catBtn').disabled=false; $('catDisc').disabled=true; $('detectBtn').disabled=true;
+}
+async function detectBands(){
+  $('detectBtn').disabled=true; $('detectMsg').textContent='reading menus…';
+  try{
+    const r = await discoverBands(cmd=>catQuery(cmd,true,400), name=>{ $('detectMsg').textContent='reading: '+name; });
+    if(!r){ $('detectMsg').textContent='Band config not found — set bands manually.'; return; }
+    radioCoverage = coverage(r.bands);
+    const names = r.bands.map(b=>b.name||'?').join(', ');
+    $('detectMsg').textContent = `${r.count} bands: ${names} m`;
+    showCoverage(radioCoverage);
+  }catch(e){ $('detectMsg').textContent='Detection failed: '+e.message; }
+  finally{ $('detectBtn').disabled=!port; }
+}
+function tuneTo(bandIdx){
+  curBandIdx = bandIdx;
+  tuneAtEpoch = nowUtc();
+  if(!port) return;
+  catQuery('FA'+String(BEACON_BANDS[bandIdx].hz).padStart(11,'0')+';', false);
+}
+
+// ── Audio ────────────────────────────────────────────────────────────
+async function listDevices(){
+  const devs=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='audioinput');
+  const cur=$('inDev').value;
+  $('inDev').innerHTML = devs.length ? devs.map(d=>`<option value="${d.deviceId}">${d.label||'Input '+d.deviceId.slice(0,6)}</option>`).join('')
+                                     : '<option value="">— no inputs found —</option>';
+  if(cur) $('inDev').value=cur;
+}
+async function startAudio(){
+  try{
+    const req={ echoCancellation:false, noiseSuppression:false, autoGainControl:false, channelCount:1 };
+    if($('inDev').value) req.deviceId={exact:$('inDev').value};
+    stream = await navigator.mediaDevices.getUserMedia({audio:req});
+    await listDevices();
+    const id=stream.getAudioTracks()[0].getSettings().deviceId; if(id) $('inDev').value=id;
+    ctx = new AudioContext({sampleRate:8000, latencyHint:'interactive'});   // the detector works at 8 kHz
+    // data: URL, not blob: — a blob: worklet is refused on file:// pages
+    await ctx.audioWorklet.addModule('data:application/javascript;charset=utf-8,'+encodeURIComponent(WORKLET_SRC));
+    const src=ctx.createMediaStreamSource(stream);
+    node=new AudioWorkletNode(ctx,'beacon-tap');
+    node.port.onmessage=onAudio;
+    const mute=ctx.createGain(); mute.gain.value=0;   // keep the graph pulling; no monitoring echo
+    src.connect(node).connect(mute).connect(ctx.destination);
+    setPill('audioPill','on','Audio '+(ctx.sampleRate/1000)+' kHz');
+    $('audioBtn').textContent='Stop audio';
+    $('startBtn').disabled=false;
+  }catch(e){ setPill('audioPill','off','Audio error'); alert('Could not start audio: '+e.message); }
+}
+function stopAudio(){
+  stopMonitor();
+  try{ node&&node.disconnect(); }catch(e){}
+  if(stream) stream.getTracks().forEach(t=>t.stop());
+  if(ctx) ctx.close();
+  node=null; stream=null; ctx=null;
+  setPill('audioPill','off','Audio idle'); $('audioBtn').textContent='Start audio'; $('startBtn').disabled=true;
+}
+function onAudio(e){
+  if(!ctx || window.__beaconTest) return;          // a test feeds its own audio through __feed
+  const ts = ctx.getOutputTimestamp();
+  const epochNow = performance.timeOrigin + ts.performanceTime + clockOffsetMs();
+  const { at, x } = e.data;
+  chunks.push({ e: epochNow + (at-ts.contextTime)*1000, x });
+  const cutoff = epochNow - 25000;
+  while(chunks.length && chunks[0].e < cutoff) chunks.shift();
+  // live level: the tone at the pitch (Goertzel over this 128 ms block), in dB
+  // over a slowly following floor
+  const p=parseInt($('pitch').value,10)||700, c=2*Math.cos(2*Math.PI*p/8000);
+  let s1=0,s2=0; for(let i=0;i<x.length;i++){ const s0=x[i]+c*s1-s2; s2=s1; s1=s0; }
+  const mx=Math.sqrt(Math.max(0,s1*s1+s2*s2-c*s1*s2));
+  liveFloor = liveFloor===null ? mx : (mx<liveFloor ? liveFloor+0.3*(mx-liveFloor) : liveFloor+0.01*(mx-liveFloor));
+  const db = 20*Math.log10((mx+1e-12)/(liveFloor+1e-12));
+  $('lvlBar').style.width = Math.max(0,Math.min(100, db*3)).toFixed(0)+'%';
+}
+let liveFloor=null;
+// For automated tests only: audio pushed in directly, with the epoch time of its first sample.
+if(window.__beaconTest) window.__feed = (x, e) => { chunks.push({ e, x: Float32Array.from(x) }); };
+
+// ── Monitoring loop ──────────────────────────────────────────────────
+function tickedBands(){ return BEACON_BANDS.map((_,i)=>i).filter(i=>$('bb'+i).checked); }
+function startMonitor(){
+  const bands = tickedBands();
+  if($('mode').value==='sweep' && !bands.length){ alert('Tick at least one band.'); return; }
+  monitoring=true; lastSlotN=null; pendingSlots=[];
+  $('startBtn').disabled=true; $('stopBtn').disabled=false;
+  if(port) catQuery('MD3;', false);                 // CW mode
+  if($('mode').value==='stay') tuneTo(parseInt($('stayBand').value,10));
+  else { sweepQueue = bands.slice(); tuneTo(sweepQueue[0]); }
+  tickTimer = setInterval(tick, 100);
+}
+function stopMonitor(){
+  monitoring=false; clearInterval(tickTimer); tickTimer=null;
+  $('startBtn').disabled=!ctx; $('stopBtn').disabled=true;
+}
+function nextSweepBand(){
+  const bands=tickedBands(); if(!bands.length) return curBandIdx;
+  const i=bands.indexOf(curBandIdx);
+  return bands[(i+1)%bands.length];
+}
+let retunedThisCycle=false;
+function tick(){
+  const now=nowUtc(), s=slotOf(now);
+  const slotN=Math.floor(now/10000);
+  $('clockPill').textContent='UTC '+new Date(now).toISOString().slice(11,19);
+  $('slotBar').style.width=(s.inSlot*10).toFixed(1)+'%';
+
+  // Sweep: retune just after slot 17's analysis window closes (9.6 s), so no
+  // measured slot straddles a band change.
+  if($('mode').value==='sweep' && s.slot===17 && s.inSlot>=9.62 && !retunedThisCycle){
+    retunedThisCycle=true; tuneTo(nextSweepBand());
+  }
+  if(s.slot===0) retunedThisCycle=false;
+
+  if(slotN!==lastSlotN){
+    lastSlotN=slotN;
+    if(curBandIdx!==null) pendingSlots.push({ n:slotN, slot:s.slot, band:curBandIdx, startMs:s.startMs, tunedAt:tuneAtEpoch });
+  }
+  // Analyse a slot once its audio has certainly arrived
+  while(pendingSlots.length && now >= pendingSlots[0].startMs + 10300){
+    finishSlot(pendingSlots.shift());
+  }
+  showNow(s);
+}
+function showNow(s){
+  if(curBandIdx===null) return;
+  const b=BEACONS[beaconAt(curBandIdx, s.slot)];
+  $('nowBand').textContent=BEACON_BANDS[curBandIdx].m+' m';
+  $('nowBeacon').textContent=b.call; $('nowLoc').textContent=b.loc;
+  const me=locToLatLon($('locator').value);
+  $('nowPath').textContent = me ? (()=>{ const g=greatCircle(me,b); return Math.round(g.brg)+'° · '+Math.round(g.km).toLocaleString()+' km'; })() : 'set locator';
+  renderHeat(beaconAt(curBandIdx, s.slot));
+}
+const median=a=>{ const s=a.slice().sort((x,y)=>x-y); return s[Math.floor(s.length/2)]; };
+function learnedOpts(band){
+  const o={ pitch: parseInt($('pitch').value,10)||700 };
+  if(onsets.length>=3){ const m=median(onsets); o.tau=[m-0.12, m+0.12]; }
+  const d=(learn.df[band]||[]).filter(v=>Date.now()-v.t < 2*3600e3).map(v=>v.df);
+  if(d.length>=2){ const m=median(d); o.df=[m-15, m+15]; }
+  if(learn.periods.length>=3) o.period=median(learn.periods);
+  return o;
+}
+async function finishSlot(ps){
+  if(ps.tunedAt > ps.startMs - 800) return;           // band changed during this window
+  // the slot's audio from 1.0 s before it starts to 9.9 s into it, 8 kHz
+  const t0ms = ps.startMs-1000, t1ms = ps.startMs+9900;
+  const use = chunks.filter(c=>c.e+128 >= t0ms && c.e <= t1ms);
+  if(!use.length) return;
+  const n = use.reduce((a,c)=>a+c.x.length,0);
+  const x = new Float32Array(n); let o=0; for(const c of use){ x.set(c.x,o); o+=c.x.length; }
+  const span = (use[use.length-1].e + 128 - use[0].e)/1000;
+  if(n < 0.97*span*8000 || span < 10.5) return;       // audio dropped out, or not enough of it
+  const bi = beaconAt(ps.band, ps.slot), b=BEACONS[bi];
+  const opts = learnedOpts(ps.band);
+  const r = await detect(x, (use[0].e-ps.startMs)/1000, b.call, opts);
+  if(!r || r.error) return;
+  const rec = { ts:ps.startMs, beacon:bi, band:ps.band, heard:r.heard, snr:r.snr, dashes:r.dashes, onset:r.onset,
+                tone:r.df, z:r.z, qrm: !!r.interference && !r.heard, bw:2500 };
+  results[bi+'|'+ps.band]=rec; log.push(rec);
+  // learn from strong, unambiguous beacons only
+  if(r.heard && r.z>=15){
+    onsets.push(r.onset); if(onsets.length>20) onsets.shift(); updateTiming();
+    (learn.df[ps.band]=learn.df[ps.band]||[]).push({ df:r.df, t:Date.now() }); if(learn.df[ps.band].length>12) learn.df[ps.band].shift();
+    if(r.period!==null && r.dashes>=2){ learn.periods.push(r.period); if(learn.periods.length>20) learn.periods.shift(); }
+  }
+  const pw=['—','100 W','10 W','1 W','0.1 W'][r.dashes];
+  $('lastResult').textContent = `Last result: ${b.call} on ${BEACON_BANDS[ps.band].m} m — ` +
+    (r.heard ? `heard, weakest dash ${pw}, SNR ${r.snr} dB, tone ${r.df>=0?'+':''}${r.df} Hz from pitch`
+             : (r.interference ? 'not heard (interference on the frequency)' : 'not heard'));
+  saveState(); renderMap(); updateCount();
+}
+function updateTiming(){
+  if(onsets.length<3){ $('timingMsg').textContent=`Timing: ${onsets.length} of 3 beacons needed for a check…`; return; }
+  const s=onsets.slice().sort((a,b)=>a-b), med=s[Math.floor(s.length/2)];
+  const ok=Math.abs(med)<=0.25;
+  $('timingMsg').textContent = `Timing: callsigns start ${med>=0?'+':''}${med.toFixed(2)} s into their slots (median of ${s.length} strong beacons). `
+    + (ok ? 'Clock is fine.' : 'Clock is off — suggestion: '+(-med).toFixed(2)+' s.');
+  $('applyOff').disabled = ok;
+  $('applyOff').dataset.sugg = (-med).toFixed(2);
+}
+
+// ── Heat grid ────────────────────────────────────────────────────────
+function renderHeat(curBeacon){
+  const me=locToLatLon($('locator').value);
+  const now=nowUtc();
+  // Which frequency each beacon is on RIGHT NOW: at any moment five beacons
+  // are active, one per band, stepping up a band every 10 seconds.
+  const slotNow=slotOf(now).slot, onAir={};
+  BEACON_BANDS.forEach((bb,ni)=>{ onAir[beaconAt(ni,slotNow)]=ni; });
+  let h='<tr><th>Beacon</th><th>On air</th><th>Location</th><th>Path</th>'+
+    BEACON_BANDS.map(b=>`<th class="b">${b.m} m<br><span class="mono" style="font-weight:400">${(b.hz/1e6).toFixed(3)}</span></th>`).join('')+'</tr>';
+  BEACONS.forEach((b,bi)=>{
+    const path = me ? (()=>{ const g=greatCircle(me,b); return Math.round(g.brg)+'° '+(g.km/1000).toFixed(1)+'k'; })() : '';
+    const oa = onAir[bi];
+    const oaCell = oa===undefined ? '<td class="mono onair"></td>'
+      : `<td class="mono onair on${oa===curBandIdx && monitoring?' mine':''}" title="Transmitting now on ${BEACON_BANDS[oa].m} m">${(BEACON_BANDS[oa].hz/1e6).toFixed(3)}</td>`;
+    h+=`<tr class="${bi===curBeacon?'cur':''}"><td class="mono"><b>${b.call}</b></td>${oaCell}<td>${b.loc}</td><td class="mono">${path}</td>`;
+    BEACON_BANDS.forEach((_,ni)=>{
+      const r=results[bi+'|'+ni];
+      if(!r){ h+='<td class="c"></td>'; return; }
+      const stale = now-r.ts > 15*60000 ? ' stale':'';
+      const age = Math.round((now-r.ts)/60000);
+      const tone = (r.tone!==undefined && r.tone!==null) ? ` · tone ${r.tone>=0?'+':''}${r.tone} Hz` : '';
+      const tip = r.heard ? `${['','100 W','10 W','1 W','0.1 W'][r.dashes]} dash heard · SNR ${r.snr} dB in 2.5 kHz${tone} · ${age} min ago`
+                          : (r.qrm ? `not heard: interference on the frequency · ${age} min ago` : `not heard · ${age} min ago`);
+      h+= r.heard ? `<td class="c c${r.dashes}${stale}" title="${tip}">${r.snr}</td>`
+                  : `<td class="c c0${stale}" title="${tip}">${r.qrm?'QRM':'–'}</td>`;
+    });
+    h+='</tr>';
+  });
+  $('heat').innerHTML=h;
+}
+
+// ── Azimuthal equidistant map centred on the user ────────────────────
+function cssVar(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+function renderMap(){
+  const c=$('map'), g=c.getContext('2d'), W=c.width, R=W/2-40, cx=W/2, cy=W/2;
+  g.fillStyle=cssVar('--map-bg'); g.fillRect(0,0,W,W);
+  const me=locToLatLon($('locator').value);
+  g.fillStyle=cssVar('--map-text'); g.font='24px system-ui'; g.textAlign='center';
+  if(!me){ g.fillText('Enter your locator to draw the map', cx, cy); return; }
+  g.strokeStyle=cssVar('--map-grid'); g.lineWidth=2;
+  [5000,10000,15000,20015].forEach(km=>{ g.beginPath(); g.arc(cx,cy,R*km/20015,0,2*Math.PI); g.stroke(); });
+  for(let a=0;a<360;a+=30){ const r=a*Math.PI/180; g.beginPath(); g.moveTo(cx,cy); g.lineTo(cx+R*Math.sin(r), cy-R*Math.cos(r)); g.stroke(); }
+  g.fillStyle=cssVar('--map-text'); g.font='22px system-ui';
+  [['N',0],['E',90],['S',180],['W',270]].forEach(([l,a])=>{ const r=a*Math.PI/180; g.fillText(l, cx+(R+22)*Math.sin(r), cy-(R+22)*Math.cos(r)+8); });
+  g.font='18px system-ui';
+  [5000,10000,15000].forEach(km=>g.fillText((km/1000)+'k km', cx+6, cy-R*km/20015-6));
+  const sel=$('mapBand').value, now=nowUtc();
+  const colours=['--h0','--h1','--h2','--h3','--h4'].map(cssVar);
+  BEACONS.forEach((b,bi)=>{
+    const gc=greatCircle(me,b), rr=R*gc.km/20015, a=gc.brg*Math.PI/180;
+    const x=cx+rr*Math.sin(a), y=cy-rr*Math.cos(a);
+    let r=null;
+    if(sel==='best'){
+      BEACON_BANDS.forEach((_,ni)=>{ const q=results[bi+'|'+ni]; if(q && (!r || (q.heard?q.dashes:0)>(r.heard?r.dashes:0))) r=q; });
+    } else r=results[bi+'|'+sel];
+    const lvl = r && r.heard ? r.dashes : 0;
+    g.globalAlpha = r && now-r.ts>15*60000 ? 0.45 : 1;
+    g.beginPath(); g.arc(x,y, r ? 11 : 7, 0, 2*Math.PI);
+    g.fillStyle = r ? colours[lvl] : cssVar('--map-grid'); g.fill();
+    g.globalAlpha=1;
+    g.fillStyle=cssVar('--text'); g.font='bold 18px ui-monospace,monospace';
+    g.fillText(b.call, x, y-16);
+  });
+  g.fillStyle=cssVar('--accent'); g.beginPath(); g.arc(cx,cy,8,0,2*Math.PI); g.fill();
+}
+function updateCount(){ $('logCount').textContent = log.length+' results logged'; }
+
+function exportCsv(){
+  const rows=[['utc','band_m','freq_mhz','beacon','location','heard','weakest_dash','snr_db_2500hz','onset_s','tone_hz','score']];
+  log.forEach(r=>rows.push([ new Date(r.ts).toISOString(), BEACON_BANDS[r.band].m, (BEACON_BANDS[r.band].hz/1e6).toFixed(3),
+    BEACONS[r.beacon].call, '"'+BEACONS[r.beacon].loc+'"', r.heard?1:0,
+    r.heard?['','100W','10W','1W','0.1W'][r.dashes]:'', r.snr===null||r.snr===undefined?'':r.snr, r.onset===null||r.onset===undefined?'':r.onset,
+    r.tone===null||r.tone===undefined?'':r.tone, r.z===undefined?'':r.z ]));
+  const blob=new Blob([rows.map(r=>r.join(',')).join('\n')],{type:'text/csv'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='beacon-log-'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
+}
+
+// ── Theme ────────────────────────────────────────────────────────────
+function applyTheme(t){
+  document.documentElement.setAttribute('data-theme',t);
+  try{ localStorage.setItem('qmx-beacon-theme',t); }catch(e){}
+  $('themeBtn').textContent = t==='light' ? '☾ Dark' : '☀ Light';
+  renderMap();
+}
+
+// ── Wiring ───────────────────────────────────────────────────────────
+buildBandList();
+loadState();
+$('stayRow').style.display = $('mode').value==='stay' ? '' : 'none';
+$('themeBtn').textContent = document.documentElement.getAttribute('data-theme')==='light' ? '☾ Dark' : '☀ Light';
+$('themeBtn').onclick=()=>applyTheme(document.documentElement.getAttribute('data-theme')==='light'?'dark':'light');
+$('audioBtn').onclick=()=> ctx ? stopAudio() : startAudio();
+$('catBtn').onclick=catConnect; $('catDisc').onclick=catDisconnect;
+$('detectBtn').onclick=detectBands;
+$('startBtn').onclick=startMonitor; $('stopBtn').onclick=stopMonitor;
+$('mode').onchange=()=>{ $('stayRow').style.display=$('mode').value==='stay'?'':'none'; saveState(); };
+$('stayBand').onchange=()=>{ saveState(); if(monitoring && $('mode').value==='stay') tuneTo(parseInt($('stayBand').value,10)); };
+$('pitch').onchange=()=>{ learn.df={}; saveState(); };   // tone offsets learned at the old pitch no longer apply
+$('offset').onchange=saveState;
+$('locator').oninput=()=>{ saveState(); renderMap(); renderHeat(-1); };
+$('mapBand').onchange=renderMap;
+$('applyOff').onclick=()=>{
+  const cur=parseFloat($('offset').value)||0, s=parseFloat($('applyOff').dataset.sugg)||0;
+  $('offset').value=(cur+s).toFixed(2); onsets=[]; saveState(); updateTiming();
+};
+$('csvBtn').onclick=exportCsv;
+$('clearBtn').onclick=()=>{ if(confirm('Clear all beacon results?')){ results={}; log=[]; learn={ df:{}, periods:[] }; onsets=[]; saveState(); renderHeat(-1); renderMap(); updateCount(); } };
+renderHeat(-1); renderMap(); updateCount();
+let lastIdleSlot=null;
+setInterval(()=>{
+  if(monitoring) return;
+  $('clockPill').textContent='UTC '+new Date(nowUtc()).toISOString().slice(11,19);
+  const n=Math.floor(nowUtc()/10000);
+  if(n!==lastIdleSlot){ lastIdleSlot=n; renderHeat(-1); }   // on-air column moves every 10 s
+}, 500);
+</script>
+</body>
+</html>
