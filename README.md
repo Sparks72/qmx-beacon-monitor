@@ -56,6 +56,13 @@ The number is the SNR of the 100 W dash in a 2.5 kHz bandwidth, the way WSJT-X
 and WSPR report SNR. Hover over a cell for details, including how far the tone
 was from your pitch. Results older than 15 minutes are shown faded.
 
+The **map** has two views. **World** shows every beacon on a world map, marked
+in the grid's colours, with great-circle paths to the ones you heard and the
+night side shaded; the line between day and night (the grey line) is often
+good for DX, and the shading moves as the day goes on. **Centred on you**
+shows true bearing and distance, for pointing a beam. **Show** picks one band
+or the best result on any band.
+
 **Export CSV** saves every result, with time, band, beacon, weakest dash, SNR,
 timing, tone offset and detection score. Results are kept in the browser
 between sessions.
@@ -126,6 +133,8 @@ export from a session where it reported something you disagree with.
 
 ## Changes in this version
 
+- World map with the beacons, the paths you heard them on and the night side
+  shaded, as well as the bearing-and-distance map, which now has coastlines.
 - Steady tones (birdies, PC whistles) are found and removed before listening,
   so they no longer cause false QRM or false weak detections (see above).
   Tested on a real recording with a 706 Hz whistle from the PC/USB side: QRM
@@ -150,6 +159,22 @@ extent permitted by law, no liability is accepted for any loss or damage from
 its use. Not affiliated with the NCDXF, the IARU or QRP Labs.
 
 ## Credits
+
+Coastlines: [Natural Earth](https://www.naturalearthdata.com/) 1:110m land
+(public domain), via the [world-atlas](https://github.com/topojson/world-atlas)
+package, simplified to 0.1° and embedded in the page:
+
+> Copyright 2013-2019 Michael Bostock. Permission to use, copy, modify, and/or
+> distribute this software for any purpose with or without fee is hereby
+> granted, provided that the above copyright notice and this permission notice
+> appear in all copies. THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR
+> DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED
+> WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE
+> LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY
+> DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+> ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+> CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
 
 The International Beacon Project is run by the Northern California DX
 Foundation (NCDXF) with the IARU: https://www.ncdxf.org/beacon/
