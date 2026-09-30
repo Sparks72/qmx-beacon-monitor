@@ -142,6 +142,7 @@ canvas#map{width:100%;max-width:520px;aspect-ratio:1/1;display:block;margin:0 au
       <input type="number" id="offset" value="0" step="0.05">
       <button id="applyOff" class="ghost" disabled>Apply suggestion</button></div>
     <div class="hint" id="timingMsg">Timing check appears after a few beacons are heard.</div>
+    <div class="hint" id="toneMsg"></div>
     <div class="row" style="margin-top:12px">
       <button id="startBtn" disabled>Start monitoring</button>
       <button id="stopBtn" class="ghost" disabled>Stop</button>
@@ -610,18 +611,128 @@ let SNR_K = -27.0;                              // calibration: 10log10(e-1 per 
 function setSnrK(k){ SNR_K = k; }
 
 
+// ── Steady tones (birdies) ────────────────────────────────────────────
+// A steady tone near the pitch, such as a receiver birdie or a PC/USB
+// whistle, is on for the whole slot at one strength, and far narrower than
+// any beacon: a beacon keys its callsign and steps its power down 30 dB
+// within the slot, which spreads it over a hertz or more. Such a tone
+// otherwise fools the detector twice over. It is energy exactly where a
+// beacon is looked for, so the slot is judged "interference", and with noise
+// on top it can even pass for a very weak beacon.
+//
+// findSteadyTones() reports the tones in one slot. The page follows them
+// from slot to slot and, once a tone has been seen in several slots at the
+// same audio frequency, passes it back in opts.notch. removeTones() then
+// subtracts it before the analysis, taking out only about +-0.3 Hz around it.
+
+function fftInPlace(re, im){
+  const n = re.length;
+  for (let i = 0, j = 0; i < n - 1; i++){
+    if (i < j){ let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; }
+    let k = n >> 1; while (k <= j){ j -= k; k >>= 1; } j += k;
+  }
+  for (let m = 1; m < n; m <<= 1){
+    const ang = -Math.PI / m, wr = Math.cos(ang), wi = Math.sin(ang);
+    for (let i = 0; i < n; i += 2 * m){
+      let cr = 1, ci = 0;
+      for (let j = 0; j < m; j++){
+        const a = i + j, b = a + m;
+        const tr = re[b] * cr - im[b] * ci, ti = re[b] * ci + im[b] * cr;
+        re[b] = re[a] - tr; im[b] = im[a] - ti; re[a] += tr; im[a] += ti;
+        const t = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = t;
+      }
+    }
+  }
+}
+
+const TONE_RANGE = 130;       // Hz either side of the pitch (the detector searches +-100)
+const TONE_MIN_DB = 12;       // line above the local noise, in the ~0.14 Hz resolution of a 10.9 s slot
+const TONE_STEADY_DB = 6;     // strongest vs weakest of five 2.2 s blocks
+
+function findSteadyTones(x, pitch){
+  const { zr, zi } = baseband(x, pitch);
+  const n = zr.length, NF = 65536;
+  const re = new Float64Array(NF), im = new Float64Array(NF);
+  for (let i = 0; i < n; i++){ const w = 0.5 - 0.5 * Math.cos(2 * Math.PI * (i + 0.5) / n); re[i] = zr[i] * w; im[i] = zi[i] * w; }
+  fftInPlace(re, im);
+  const bin = FSB / NF, K = Math.round(TONE_RANGE / bin);
+  const idx = k => (k + NF) % NF;
+  const P = k => { const j = idx(k); return re[j] * re[j] + im[j] * im[j]; };
+  // noise: median power over the range, in cells of 2 Hz, so a local median is cheap
+  const cellW = Math.round(2 / bin), cells = [];
+  for (let c = -K; c < K; c += cellW){ const v = []; for (let k = c; k < c + cellW; k++) v.push(P(k)); v.sort((a, b) => a - b); cells.push(v[v.length >> 1]); }
+  const localNoise = k => {
+    const c = Math.floor((k + K) / cellW), v = [];
+    for (let d = -5; d <= 5; d++){ if (Math.abs(d) <= 1) continue; const q = c + d; if (q >= 0 && q < cells.length) v.push(cells[q]); }
+    v.sort((a, b) => a - b); return v.length ? v[v.length >> 1] : cells[Math.min(cells.length - 1, Math.max(0, c))];
+  };
+  const out = [], thr = Math.pow(10, TONE_MIN_DB / 10);
+  const side = Math.round(0.6 / bin), side2 = Math.round(0.9 / bin);
+  for (let k = -K + 3; k < K - 3; k++){
+    const p0 = P(k);
+    if (p0 < P(k - 1) || p0 < P(k + 1) || p0 < P(k - 2) || p0 < P(k + 2)) continue;
+    const nz = localNoise(k); if (!(p0 > thr * nz)) continue;
+    // narrow: 0.6-0.9 Hz either side must be down near the noise, well below the line
+    let s = 0, m = 0; for (let d = side; d <= side2; d++){ s += P(k + d) + P(k - d); m += 2; }
+    if (s / m > p0 / 30) continue;
+    const yl = Math.log(P(k - 1) + 1e-30), yc = Math.log(p0 + 1e-30), yr = Math.log(P(k + 1) + 1e-30);
+    const den = yl - 2 * yc + yr, off = den < 0 ? Math.max(-0.5, Math.min(0.5, 0.5 * (yl - yr) / den)) : 0;
+    const fo = (k + off) * bin;
+    // steady: the same strength through the slot (a beacon steps down 30 dB)
+    const B = 5, L = Math.floor(n / B), w = -2 * Math.PI * fo / FSB, pw = [];
+    for (let b = 0; b < B; b++){
+      let sr = 0, si = 0;
+      for (let i = b * L; i < (b + 1) * L; i++){ const c = Math.cos(w * i), sn = Math.sin(w * i); sr += zr[i] * c - zi[i] * sn; si += zr[i] * sn + zi[i] * c; }
+      pw.push((sr * sr + si * si) / (L * L));
+    }
+    const steady = 10 * Math.log10(Math.max(...pw) / Math.max(1e-30, Math.min(...pw))) <= TONE_STEADY_DB;
+    out.push({ f: +(pitch + fo).toFixed(2), db: +(10 * Math.log10(p0 / nz)).toFixed(1), steady });
+    k += side;                                   // one report per line
+  }
+  return out;
+}
+
+// Subtract steady tones at the given audio frequencies (Hz) from x, in place:
+// each is mixed to 0 Hz, smoothed over 3 s (two 1.5 s moving averages), mixed
+// back and subtracted. That follows the tone's own slow changes and leaves
+// anything more than about 0.5 Hz away untouched.
+function removeTones(x, freqs){
+  const n = x.length, L = Math.round(1.5 * FS);
+  const smooth = a => {
+    const p = new Float64Array(n + 1); for (let i = 0; i < n; i++) p[i + 1] = p[i] + a[i];
+    const o = new Float64Array(n);
+    for (let i = 0; i < n; i++){ const lo = Math.max(0, i - (L >> 1)), hi = Math.min(n, i + (L >> 1) + 1); o[i] = (p[hi] - p[lo]) / (hi - lo); }
+    return o;
+  };
+  for (const f of freqs){
+    const w = 2 * Math.PI * f / FS, re = new Float64Array(n), im = new Float64Array(n);
+    for (let i = 0; i < n; i++){ re[i] = x[i] * Math.cos(w * i); im[i] = -x[i] * Math.sin(w * i); }
+    const sr = smooth(smooth(re)), si = smooth(smooth(im));
+    for (let i = 0; i < n; i++) x[i] -= 2 * (sr[i] * Math.cos(w * i) - si[i] * Math.sin(w * i));
+  }
+  return x;
+}
+
+
 onmessage = e => {
   const { id, x, t0, call, opts } = e.data;
-  let r = null;
-  try { r = analyseRaw(x, t0, call, opts); } catch (err) { r = { error: String(err) }; }
-  postMessage({ id, r });
+  let r = null, tones = [];
+  try {
+    // steady tones in this slot, reported to the page, which follows them
+    // from slot to slot; the ones it has confirmed come back in opts.notch
+    tones = findSteadyTones(x, (opts && opts.pitch) || 700);
+    if (opts && opts.notch && opts.notch.length) removeTones(x, opts.notch);
+    r = analyseRaw(x, t0, call, opts);
+  } catch (err) { r = { error: String(err) }; }
+  postMessage({ id, r, tones });
 };
+
 `;
 let detector = null, detId = 0; const detWait = new Map();
 function detect(x, t0, call, opts){
   if(!detector){
     detector = new Worker('data:text/javascript;charset=utf-8,' + encodeURIComponent(DETECTOR_SRC));
-    detector.onmessage = e => { const f = detWait.get(e.data.id); detWait.delete(e.data.id); if(f) f(e.data.r); };
+    detector.onmessage = e => { const f = detWait.get(e.data.id); detWait.delete(e.data.id); if(f) f(e.data); };
   }
   return new Promise(res => { const id = ++detId; detWait.set(id, res); detector.postMessage({ id, x, t0, call, opts }, [x.buffer]); });
 }
@@ -640,6 +751,7 @@ let results={};                       // key `${beacon}|${band}` -> latest resul
 let log=[];                           // result history for CSV
 let onsets=[];                        // recent callsign start times of strong beacons (s into slot)
 let learn={ df:{}, periods:[] };      // tone offset per band and dash spacing, learned from strong beacons
+let tones=[];                         // steady tones (birdies) followed from slot to slot: { f, n, miss, t, db }
 let sweepQueue=[];
 let radioCoverage=null;
 
@@ -654,7 +766,7 @@ function saveState(){
       locator:$('locator').value, pitch:$('pitch').value, offset:$('offset').value,
       mode:$('mode').value, stay:$('stayBand').value,
       ticks: BEACON_BANDS.map((_,i)=>$('bb'+i).checked),
-      results, log: log.slice(-5000), learn, onsets
+      results, log: log.slice(-5000), learn, onsets, tones
     }));
   }catch(e){}
 }
@@ -669,6 +781,7 @@ function loadState(){
     if(Array.isArray(s.ticks)) s.ticks.forEach((v,i)=>{ const e=$('bb'+i); if(e) e.checked=!!v; });
     results=s.results||{}; log=s.log||[];
     if(s.learn) learn=s.learn; if(Array.isArray(s.onsets)) onsets=s.onsets;
+    if(Array.isArray(s.tones)) tones=s.tones.filter(q=>Date.now()-q.t < 24*3600e3);
     // Results from before the new detector gave SNR in its ~70 Hz analysis
     // bandwidth; convert them to 2.5 kHz, as reported now.
     const conv=r=>{ if(r && r.bw!==2500){ if(r.snr!==null && r.snr!==undefined) r.snr=+(r.snr-15.5).toFixed(1); r.bw=2500; } };
@@ -841,7 +954,7 @@ function tickedBands(){ return BEACON_BANDS.map((_,i)=>i).filter(i=>$('bb'+i).ch
 function startMonitor(){
   const bands = tickedBands();
   if($('mode').value==='sweep' && !bands.length){ alert('Tick at least one band.'); return; }
-  monitoring=true; lastSlotN=null; pendingSlots=[];
+  monitoring=true; lastSlotN=null; pendingSlots=[]; updateToneMsg();
   $('startBtn').disabled=true; $('stopBtn').disabled=false;
   if(port) catQuery('MD3;', false);                 // CW mode
   if($('mode').value==='stay') tuneTo(parseInt($('stayBand').value,10));
@@ -897,6 +1010,8 @@ function learnedOpts(band){
   const d=(learn.df[band]||[]).filter(v=>Date.now()-v.t < 2*3600e3).map(v=>v.df);
   if(d.length>=2){ const m=median(d); o.df=[m-15, m+15]; }
   if(learn.periods.length>=3) o.period=median(learn.periods);
+  const nt=activeTones().map(q=>q.f).filter(f=>Math.abs(f-o.pitch)<=130);
+  if(nt.length) o.notch=nt;
   return o;
 }
 async function finishSlot(ps){
@@ -911,7 +1026,9 @@ async function finishSlot(ps){
   if(n < 0.97*span*8000 || span < 10.5) return;       // audio dropped out, or not enough of it
   const bi = beaconAt(ps.band, ps.slot), b=BEACONS[bi];
   const opts = learnedOpts(ps.band);
-  const r = await detect(x, (use[0].e-ps.startMs)/1000, b.call, opts);
+  const res = await detect(x, (use[0].e-ps.startMs)/1000, b.call, opts);
+  updateTones(res.tones);
+  const r = res.r;
   if(!r || r.error) return;
   const rec = { ts:ps.startMs, beacon:bi, band:ps.band, heard:r.heard, snr:r.snr, dashes:r.dashes, onset:r.onset,
                 tone:r.df, z:r.z, qrm: !!r.interference && !r.heard, bw:2500 };
@@ -927,6 +1044,32 @@ async function finishSlot(ps){
     (r.heard ? `heard, weakest dash ${pw}, SNR ${r.snr} dB, tone ${r.df>=0?'+':''}${r.df} Hz from pitch`
              : (r.interference ? 'not heard (interference on the frequency)' : 'not heard'));
   saveState(); renderMap(); updateCount();
+}
+// ── Steady tones ─────────────────────────────────────────────────────
+// A tone that is on for whole slots at one strength and a fraction of a hertz
+// wide is not a beacon: a receiver birdie, or a whistle from the PC or USB
+// lead. Once one has been seen at the same audio frequency in 3 slots it is
+// taken out of the audio before listening (see removeTones in the detector),
+// so it can neither mask a beacon as "QRM" nor pass for a very weak one.
+const activeTones=()=>tones.filter(q=>q.n>=3);
+function updateTones(found){
+  const st=(found||[]).filter(l=>l.steady);
+  tones.forEach(q=>q.hit=false);
+  for(const l of st){
+    const q=tones.find(q=>Math.abs(q.f-l.f)<0.4);
+    if(q){ q.f=+(q.f+0.3*(l.f-q.f)).toFixed(2); q.n++; q.miss=0; q.hit=true; q.t=Date.now(); q.db=l.db; }
+    else tones.push({ f:l.f, n:1, miss:0, hit:true, t:Date.now(), db:l.db });
+  }
+  tones.forEach(q=>{ if(!q.hit) q.miss++; delete q.hit; });
+  // a confirmed tone survives 18 slots (3 minutes) without being seen; a new one, 3
+  tones=tones.filter(q=>q.miss < (q.n>=3 ? 18 : 3));
+  updateToneMsg();
+}
+function updateToneMsg(){
+  const a=activeTones().filter(q=>Math.abs(q.f-(parseInt($('pitch').value,10)||700))<=130);
+  $('toneMsg').textContent = a.length
+    ? `Steady tone${a.length>1?'s':''} removed: ${a.map(q=>q.f.toFixed(1)+' Hz').join(', ')}. On all the time and far narrower than a beacon (a birdie or a whistle from the PC), so ${a.length>1?'they are':'it is'} taken out before listening.`
+    : (monitoring ? 'No steady tones (birdies) near the pitch.' : '');
 }
 function updateTiming(){
   if(onsets.length<3){ $('timingMsg').textContent=`Timing: ${onsets.length} of 3 beacons needed for a check…`; return; }
@@ -1027,7 +1170,7 @@ function applyTheme(t){
 
 // ── Wiring ───────────────────────────────────────────────────────────
 buildBandList();
-loadState();
+loadState(); updateToneMsg();
 $('stayRow').style.display = $('mode').value==='stay' ? '' : 'none';
 $('themeBtn').textContent = document.documentElement.getAttribute('data-theme')==='light' ? '☾ Dark' : '☀ Light';
 $('themeBtn').onclick=()=>applyTheme(document.documentElement.getAttribute('data-theme')==='light'?'dark':'light');
@@ -1037,7 +1180,7 @@ $('detectBtn').onclick=detectBands;
 $('startBtn').onclick=startMonitor; $('stopBtn').onclick=stopMonitor;
 $('mode').onchange=()=>{ $('stayRow').style.display=$('mode').value==='stay'?'':'none'; saveState(); };
 $('stayBand').onchange=()=>{ saveState(); if(monitoring && $('mode').value==='stay') tuneTo(parseInt($('stayBand').value,10)); };
-$('pitch').onchange=()=>{ learn.df={}; saveState(); };   // tone offsets learned at the old pitch no longer apply
+$('pitch').onchange=()=>{ learn.df={}; saveState(); updateToneMsg(); };   // tone offsets learned at the old pitch no longer apply
 $('offset').onchange=saveState;
 $('locator').oninput=()=>{ saveState(); renderMap(); renderHeat(-1); };
 $('mapBand').onchange=renderMap;
@@ -1046,7 +1189,7 @@ $('applyOff').onclick=()=>{
   $('offset').value=(cur+s).toFixed(2); onsets=[]; saveState(); updateTiming();
 };
 $('csvBtn').onclick=exportCsv;
-$('clearBtn').onclick=()=>{ if(confirm('Clear all beacon results?')){ results={}; log=[]; learn={ df:{}, periods:[] }; onsets=[]; saveState(); renderHeat(-1); renderMap(); updateCount(); } };
+$('clearBtn').onclick=()=>{ if(confirm('Clear all beacon results?')){ results={}; log=[]; learn={ df:{}, periods:[] }; onsets=[]; tones=[]; updateToneMsg(); saveState(); renderHeat(-1); renderMap(); updateCount(); } };
 renderHeat(-1); renderMap(); updateCount();
 let lastIdleSlot=null;
 setInterval(()=>{

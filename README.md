@@ -83,6 +83,20 @@ and after the transmission, that the callsign's gaps are quiet, and that the
 power steps down after the 100 W dash. A carrier or another station's CW fails
 these checks and is shown as **QRM**.
 
+### Steady tones (birdies)
+
+A steady tone near the pitch, such as a receiver birdie or a whistle from the
+PC or USB lead, is on all the time at one strength, and is far narrower than a
+beacon, which keys its callsign and steps its power down 30 dB within its
+10 seconds. Left alone, such a tone makes beacons look like **QRM**, and with
+noise on top it can even pass for a very weak beacon.
+
+The monitor looks for these tones in every slot. A tone seen at the same audio
+frequency in 3 slots is taken out of the audio before listening. Only about
+±0.3 Hz around it is removed, so a beacon even 2 Hz away is heard normally.
+The tones being removed are listed under the timing check. A tone that goes
+away is forgotten after 3 minutes.
+
 The analysis runs in a background worker, taking under a second per slot, so
 the page stays responsive.
 
@@ -111,6 +125,16 @@ These are simulations. Real-world reports are very welcome, especially the CSV
 export from a session where it reported something you disagree with.
 
 ## Changes in this version
+
+- Steady tones (birdies, PC whistles) are found and removed before listening,
+  so they no longer cause false QRM or false weak detections (see above).
+  Tested on a real recording with a 706 Hz whistle from the PC/USB side: QRM
+  verdicts caused by the whistle disappeared. On simulated beacons with a
+  whistle like that 6 Hz away, beacons at −16 to −18 dB went from heard in
+  about 1 slot in 6 back to about 9 in 10, the same as with no whistle. No
+  simulated beacon, from −16 to +30 dB, was ever mistaken for a steady tone.
+
+## Earlier changes
 
 - New detector: about 12 dB more sensitive, with interference rejection
   (see above).
