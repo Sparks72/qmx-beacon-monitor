@@ -39,6 +39,8 @@ body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--
   font-size:14px;padding:14px;max-width:1280px;margin:0 auto}
 header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;
   padding-bottom:12px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.hdr-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.hdr-divider{width:1px;height:22px;background:var(--border);margin:0 2px}
 h1{font-size:1.15rem;font-weight:600}
 h1 span{color:var(--accent)}
 .pill{font-size:.72rem;padding:3px 10px;border-radius:99px;border:1px solid var(--border);
@@ -88,15 +90,48 @@ table.heat tr.cur td.c{box-shadow:inset 0 0 0 2px var(--accent)}
 .c0{background:var(--h0);color:var(--text2)} .c1{background:var(--h1);color:#fff}
 .c2{background:var(--h2);color:#fff} .c3{background:var(--h3);color:#111} .c4{background:var(--h4);color:#fff}
 td.stale{opacity:.45}
+table.heat td[title]{cursor:pointer}
+table.heat td.picked{outline:2px solid var(--accent);outline-offset:-2px}
+#cellInfo{font-size:.8rem;color:var(--text);margin-top:8px;min-height:1.2em}
 .legend{display:flex;gap:8px;flex-wrap:wrap;font-size:.72rem;color:var(--text2);margin-top:10px;align-items:center}
 .legend span{padding:2px 7px;border-radius:3px}
+/* levels panel */
+.meterwrap{display:flex;align-items:center;gap:8px}
+.meter{position:relative;flex:1;height:16px;border-radius:4px;overflow:hidden;
+  background:linear-gradient(90deg,color-mix(in srgb,var(--green) 22%,var(--well)) 0 80%,color-mix(in srgb,var(--amber) 30%,var(--well)) 80% 95%,color-mix(in srgb,var(--red) 35%,var(--well)) 95% 100%)}
+.meter>#inRms{position:absolute;left:0;top:3px;bottom:3px;width:0%;background:var(--accent);border-radius:2px}
+.meter>#inPeak{position:absolute;top:0;bottom:0;width:3px;left:0%;background:var(--text);opacity:.85}
+.clip{font-size:.7rem;font-weight:700;letter-spacing:.06em;padding:2px 7px;border-radius:4px;border:1px solid var(--border);color:var(--text2);background:var(--panel2)}
+.clip.on{background:var(--red);border-color:var(--red);color:#fff}
+.scale{display:flex;justify-content:space-between;font-size:.66rem;color:var(--text2);margin:3px 38px 6px 0}
+#inAdvice.bad{color:var(--red)} #inAdvice.warn{color:var(--amber)} #inAdvice.good{color:var(--green)}
+.ctlrow{display:flex;align-items:center;gap:6px;margin-bottom:8px}
+.ctlrow label{min-width:62px}
+.ctlrow input[type=range]{flex:1;min-width:80px;accent-color:var(--accent)}
+.ctlrow button{padding:5px 9px;min-width:34px}
+.ctlrow .val{min-width:58px;text-align:right;font-size:.8rem}
+#catches{font-family:ui-monospace,monospace;font-size:.78rem;line-height:1.55;max-height:220px;overflow:auto;margin-top:6px}
+#catches .row1{display:grid;grid-template-columns:5.2em 5.6em 3.6em 5.4em 4.4em 1fr;gap:6px;padding:2px 4px;border-bottom:1px solid var(--border)}
+pre#catLog{font-family:ui-monospace,monospace;font-size:.72rem;line-height:1.45;background:var(--well);border:1px solid var(--border);border-radius:5px;padding:6px 8px;max-height:230px;overflow:auto;white-space:pre-wrap;color:var(--text)}
 canvas#map{width:100%;display:block;margin:0 auto;border-radius:6px}
 </style>
 </head>
 <body>
 <header>
   <h1>QMX <span>Beacon Monitor</span></h1>
-  <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+  <div class="hdr-actions">
+    <!-- Audio -->
+    <button id="audioBtn">Start audio</button>
+    <!-- CAT -->
+    <button id="catBtn" class="ghost">Connect CAT</button>
+    <button id="catDisc" class="ghost" disabled>Disconnect</button>
+    <button id="detectBtn" class="ghost" disabled>Detect bands</button>
+    <div class="hdr-divider"></div>
+    <!-- Monitor -->
+    <button id="startBtn" disabled>Start monitoring</button>
+    <button id="stopBtn" class="ghost" disabled>Stop</button>
+    <div class="hdr-divider"></div>
+    <!-- Status pills -->
     <span class="pill off" id="audioPill">Audio idle</span>
     <span class="pill off" id="catPill">CAT off</span>
     <span class="pill" id="clockPill">UTC —</span>
@@ -110,21 +145,48 @@ canvas#map{width:100%;display:block;margin:0 auto;border-radius:6px}
     <h2>Connections</h2>
     <div class="row"><label for="inDev">Audio input</label>
       <select id="inDev"><option value="">— click Start audio —</option></select></div>
-    <div class="row">
-      <button id="audioBtn">Start audio</button>
-      <button id="catBtn" class="ghost">Connect CAT</button>
-      <button id="catDisc" class="ghost" disabled>Disconnect</button>
-    </div>
     <div class="hint">CAT is optional: without it, tune the radio yourself and use “Stay on one band”.</div>
+  </div>
+
+  <div class="panel">
+    <h2>Levels</h2>
+    <div class="meterwrap">
+      <div class="meter" title="Audio from the QMX into the PC: bar = average, line = peak"><div id="inRms"></div><div id="inPeak"></div></div>
+      <span class="clip" id="clipLamp">CLIP</span>
+    </div>
+    <div class="scale"><span>−60</span><span>−48</span><span>−36</span><span>−24</span><span>−12</span><span>0 dBFS</span></div>
+    <div class="hint mono" id="inNums" style="margin-top:0">PC input: —</div>
+    <div class="hint" id="inAdvice">Start audio to see the level coming in from the QMX.</div>
+    <div style="margin-top:12px">
+      <div class="ctlrow"><label for="agSl">Volume</label>
+        <button class="ghost" id="agDn" title="1 dB down">−</button>
+        <input type="range" id="agSl" min="0" max="240" step="1" value="0" disabled>
+        <button class="ghost" id="agUp" title="1 dB up">+</button>
+        <span class="mono val" id="agVal">—</span></div>
+      <div class="ctlrow"><label for="rgSl">RF gain</label>
+        <button class="ghost" id="rgDn" title="1 dB down">−</button>
+        <input type="range" id="rgSl" min="0" max="70" step="1" value="0" disabled>
+        <button class="ghost" id="rgUp" title="1 dB up">+</button>
+        <span class="mono val" id="rgVal">—</span></div>
+      <div class="hint mono" id="agcVal" style="margin-top:0">AGC: —</div>
+      <div class="row" style="margin-top:8px"><button class="ghost" id="volTest" disabled>Does Volume change the PC level?</button></div>
+      <div class="hint" id="volTestMsg">On the QMX, Volume sets the level to the PC as well as the headphones, so use Volume to keep the CLIP light off. The controls work once CAT is connected; each − / + is 1 dB, and the Volume slider goes no more than 20 dB above where it is now, so a slip can't blast your headphones.</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>CAT log</h2>
+    <pre id="catLog">(nothing yet — connect CAT)</pre>
+    <div class="row" style="margin-top:8px">
+      <button id="catLogCopy" class="ghost">Copy log</button>
+      <span class="hint" id="catLogMsg" style="margin:0">Newest first. → sent to the QMX, ← its reply. Menu reads (Detect bands) are left out.</span>
+    </div>
   </div>
 
   <div class="panel">
     <h2>Beacon bands</h2>
     <div id="bandList"></div>
-    <div class="row" style="margin-top:10px">
-      <button id="detectBtn" class="ghost" disabled>Detect radio bands</button>
-      <span class="hint" id="detectMsg" style="margin:0"></span>
-    </div>
+    <span class="hint" id="detectMsg" style="margin-top:8px;display:block"></span>
     <div class="hint">Detection reads the radio's Band config table (read-only) and checks each beacon
       frequency against your bands' min/max limits. Tick or untick to override.</div>
   </div>
@@ -145,12 +207,9 @@ canvas#map{width:100%;display:block;margin:0 auto;border-radius:6px}
     <div class="row"><label for="offset">Clock adj. (s)</label>
       <input type="number" id="offset" value="0" step="0.05">
       <button id="applyOff" class="ghost" disabled>Apply suggestion</button></div>
-    <div class="hint" id="timingMsg">Timing check appears after a few beacons are heard.</div>
+    <div class="hint" id="timingMsg">Clock check appears after a few beacons are heard.</div>
     <div class="hint" id="toneMsg"></div>
-    <div class="row" style="margin-top:12px">
-      <button id="startBtn" disabled>Start monitoring</button>
-      <button id="stopBtn" class="ghost" disabled>Stop</button>
-    </div>
+    <div class="hint">A beacon counts as heard only when its callsign fits clearly better than any of the other 17 callsigns, at least two of its letters are confirmed on their own, and its 100 W dash follows. With no aerial connected, nothing should be heard.</div>
   </div>
 </div>
 
@@ -173,11 +232,18 @@ canvas#map{width:100%;display:block;margin:0 auto;border-radius:6px}
   <div class="panel">
     <h2>Propagation grid</h2>
     <div style="overflow-x:auto"><table class="heat" id="heat"></table></div>
+    <div id="cellInfo" class="hint">Click a cell for its details.</div>
     <div class="legend">
       <span class="c1">100 W</span><span class="c2">10 W</span><span class="c3">1 W</span><span class="c4">0.1 W</span>
       <span class="c0">not heard</span>
-      <span>— weakest dash heard; number = SNR of the 100 W dash in 2.5 kHz (dB, as WSJT-X and WSPR give it). QRM = interference on the frequency. Faded = older than 15 min.</span>
+      <span>— weakest dash heard; number = SNR of the 100 W dash in 2.5 kHz (dB, as WSJT-X and WSPR give it). Click a cell for details. Faded = older than 15 min. A beacon heard stays in its cell for an hour, even if later tries miss it.</span>
     </div>
+  </div>
+
+  <div class="panel">
+    <h2>Catches</h2>
+    <div class="hint" style="margin-top:0">Every beacon heard, newest first (times in UTC). Kept with the log, so they are also in the CSV export.</div>
+    <div id="catches"></div>
   </div>
 
   <div class="panel">
@@ -348,12 +414,17 @@ registerProcessor('beacon-tap', RawTap);
 // here as text; the worker is started from a data: URL, which also works when
 // the page is opened from disk.
 //
-// Method: each slot's audio is mixed down around the CW pitch and searched for
-// the beacon it must be, from the schedule: its callsign at 22 WPM followed by
-// a one-second dash, matched in narrow bandwidths (a dit's worth for the
-// callsign, 4 Hz for the dash) over +-100 Hz of tone and +-1 s of timing.
-// Then checks against interference (silence before and after, the callsign's
-// gaps, the power stepping down) and each later dash measured in 4 Hz.
+// Method: each slot's audio is mixed down around the CW pitch and scored
+// against ALL 18 beacon callsigns (22 WPM keying, 0.44 s of silence before),
+// over +-100 Hz of tone and -0.5..+0.7 s of timing. The expected beacon is
+// heard only if
+//   - its own callsign fits well (noise alone never reached the bar in tests),
+//   - it fits clearly better than every other callsign (noise, clicks,
+//     birdies and other people's CW fit a wrong callsign just as well),
+//   - at least two of its letters are confirmed on their own,
+//   - the gap after it is quiet and a 100 W dash follows, about as strong as
+//     the callsign, and the power then steps down.
+// Nothing is learned from one slot to the next.
 // ════════════════════════════════════════════════════════════════════
 const DETECTOR_SRC = String.raw`// analyseRaw(x, t0, call, opts) — x: Float32Array of receiver audio at 8 kHz,
 // whose first sample is t0 seconds from the slot start; call: the beacon
@@ -422,41 +493,89 @@ const energy = (P, a, L) => { const r = P.pr[a + L] - P.pr[a], q = P.pi[a + L] -
 
 function median(a){ const s = Float64Array.from(a).sort(); return s.length ? s[s.length >> 1] : 0; }
 
-const DF_MAX = 100, DF_STEP = 1;
-const SUB = 0.25;                          // a dash is measured as four coherent 0.25 s pieces
-const Z_HEARD_KNOWN = 5.5;                 // ...and with timing and tone known (see tests)
-const Z_HEARD = 6.5;                       // detection threshold: noise alone reached 6.03 at most in 300 slots
-const DASH_T = 7.0;                        // sum(e-1) over a dash's 4 pieces: noise exceeds this 0.15% of the time
+// ── The decision: the expected callsign against the other 17 ──────────
+// Noise, clicks, birdies and other people's CW fit a wrong callsign just as
+// well as the right one. So every slot is scored against all 18 NCDXF
+// callsigns, over the same tones and times, and the expected beacon counts
+// as heard only if its own callsign fits clearly better than every other.
+// Nothing is learned from slot to slot, so one bad decision cannot lead to
+// more.
+const CALLS = ['4U1UN','VE8AT','W6WX','KH6RS','ZL6B','VK6RBP','JA2IGY','RR9O','VR2B',
+               '4S7B','ZS6DN','5Z4B','4X6TU','OH2B','CS3B','LU4AA','OA4B','YV5B'];
+const QUIET = 8;                 // dits of silence just before the callsign (0.44 s: the previous beacon has finished; ordinary CW rarely pauses that long)
+const CELL = 4;                  // dit energies are kept every 4 baseband samples (2 ms)
+
+// A callsign as dit cells (1 = key down), QUIET silent cells first, with
+// zero-mean, unit-length weights: noise scores ~N(0,1); a steady carrier 0.
+function callTemplate(call){
+  const u = new Array(QUIET).fill(0), el = callElements(call);
+  const keyed = new Array(el.len).fill(0);
+  for (const [s, d] of el.on) for (let q = 0; q < d; q++) keyed[s + q] = 1;
+  u.push(...keyed);
+  // which cells belong to each character, for the every-letter check
+  const chars = []; let t = 0;
+  [...call].forEach((ch, ci) => {
+    const cells = [];
+    for (const sym of MORSE[ch]){ const d = sym === '.' ? 1 : 3; for (let q = 0; q < d; q++) cells.push(QUIET + t + q); t += d + 1; }
+    t += 2; chars.push({ ch, cells });
+  });
+  const m = u.reduce((a, b) => a + b, 0) / u.length;
+  let w = u.map(v => v - m); const s = Math.sqrt(w.reduce((a, b) => a + b * b, 0)); w = w.map(v => v / s);
+  const off = u.map((_, q) => Math.round(q * DIT * FSB / CELL));
+  return { u, w, off, len: el.len, chars };
+}
+const TPL = {}; for (const c of CALLS) TPL[c] = callTemplate(c);
+
+// How well callsign b fits a clean transmission of callsign a (its best
+// alignment, 0..1). VR2B and OH2B, for instance, look 87% alike; a real VR2B
+// therefore scores OH2B at up to 0.87 of its own score, and that is allowed for.
+const RHO = (() => {
+  const R = 8, r = {};                               // 8 points per dit
+  for (const a of CALLS){
+    r[a] = {};
+    const A = TPL[a], sig = new Float64Array((A.u.length + 120) * R);
+    A.u.forEach((v, q) => { for (let i = 0; i < R; i++) sig[(60 + q) * R + i] = v; });
+    const fit = T => { let b = -1e9;
+      for (let s = 0; s + T.u.length * R <= sig.length; s++){
+        let z = 0; for (let q = 0; q < T.u.length; q++){ let c = 0; for (let i = 0; i < R; i++) c += sig[s + q * R + i]; z += T.w[q] * c / R; }
+        if (z > b) b = z; }
+      return b; };
+    const own = fit(A);
+    for (const b of CALLS) if (b !== a) r[a][b] = Math.max(0, fit(TPL[b]) / own);
+  }
+  return r;
+})();
+
+const DF_MAX = 100, DF_STEP = 4;           // tone search, Hz from the pitch (a dit is ~18 Hz wide)
+const TAU_MIN = -0.5, TAU_MAX = 0.7, TAU_STEP = 0.01;   // callsign start, s into the slot. The beacons are GPS-timed: with
+                                                         // the PC clock right a callsign starts within a few tenths of the slot start. Was
+                                                         // +1.5 s; a false 5Z4B catch on a real band (2 Oct 2026) started at +1.41 s.
+const Z_MIN = 6.0;          // own callsign score needed. Simulated noise never reached it; real band noise does in ~3.5% of
+                            // slots (top 1% at 7.1, measured 2 Oct 2026), which the rival, gap and dash checks then stop.
+                            // A bar of 7 would cut -18 dB beacons from 35% to 15%, so it stays at 6.
+const MARGIN = 0.5;         // a rival may reach rho + MARGIN*(1-rho) of the own score...
+const DELTA = 1.5;          // ...plus this much (the luck of the best of 17 in noise)
+const CHAR_Z = 1.65;        // each character: sum(e-1)/sqrt(cells) on noise is ~N(0,1); 1.65 = 95% one-sided
+const CHAR_FRAC = 0.3;      // ...and at least 30% of the callsign's average strength
+const MIN_LETTERS = 2;      // letters that must be confirmed on their own
+const SUB = 0.25;           // a dash is measured as four coherent 0.25 s pieces
+const DASH1_T = 14.0;       // 100 W dash: sum(e-1) over its 4 pieces
+const DASH_T = 7.0;         // later dashes, at a known spacing
+const GAP_MAX = 0.35;       // gap after the callsign: below 0.35 of the callsign's strength (beacons: 95% under 0.29)
+const DASH_MIN = 11;        // 100 W dash vs callsign strength per dit (beacons: 12-34, median 25)
 
 function analyseRaw(x, t0, call, opts = {}){
   const pitch = opts.pitch || 700;
-  // What earlier slots have taught: every NCDXF beacon is GPS-timed, so all of
-  // them start their callsign at the same moment relative to the PC clock; and
-  // on one band all of them arrive at the same tone, set by the rig's own
-  // frequency error. Once known, searching only near those values leaves far
-  // fewer chances for noise or interference to fit, and a lower bar for weak
-  // beacons. opts.tau / opts.df: [lo, hi], or undefined to search everything.
-  const learnedP = opts.period || null;    // dash spacing learned from strong beacons, if known
-  if (x.length < FS * 9) return null;
+  if (x.length < FS * 9 || !TPL[call]) return null;
   const { zr, zi, t0off } = baseband(x, pitch);
   const n = zr.length;
-  const tOf = j => t0 + t0off + j / FSB;              // time (s from slot start) of baseband sample j
   const jOf = t => Math.round((t - t0 - t0off) * FSB);
-
-  const Ld = Math.max(1, Math.round(DIT * FSB));      // 109 samples ~ 54.5 ms
-  const Ls = Math.round(SUB * FSB);                   // 500 samples
-  const el = callElements(call);
-  const Tcall = el.len * DIT;
+  const Ld = Math.max(1, Math.round(DIT * FSB)), Ls = Math.round(SUB * FSB);
   const dfs = []; for (let d = -DF_MAX; d <= DF_MAX; d += DF_STEP) dfs.push(d);
-  const kIn = k => !opts.df || (dfs[k] >= opts.df[0] && dfs[k] <= opts.df[1]);
-  const zNeed = (opts.tau && opts.df) ? Z_HEARD_KNOWN : Z_HEARD;
 
-  // The noise level at each frequency, from a Welch spectrum of the whole slot
-  // (Hann segments of 0.256 s, half overlapped): median over segments, then a
-  // running median across +-40 Hz, so neither the beacon's keying (it is on for
-  // part of the slot) nor its own spectral skirts raise the estimate. Phi is in
-  // "per sample" units: a rectangular window of L samples then has mean noise
-  // energy L * Phi, whatever its length.
+  // Noise level at each tone: Welch spectrum of the slot (Hann, 0.256 s,
+  // half overlapped), median over segments, then a running median over
+  // +-40 Hz. Units per sample, so a window of L samples has mean noise L*phi.
   const SEG = 512, hann = new Float64Array(SEG); let w2 = 0;
   for (let i = 0; i < SEG; i++){ hann[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / SEG); w2 += hann[i] * hann[i]; }
   const phiRaw = new Float64Array(dfs.length);
@@ -473,147 +592,172 @@ function analyseRaw(x, t0, call, opts = {}){
     }
     phiRaw[k] = median(v) / Math.LN2;
   }
-  const phi = Array.from(phiRaw, (_, i) => median(phiRaw.slice(Math.max(0, i - 40), i + 41)));
-  let Pcur = null;
-  const e = (k, a, L) => energy(Pcur, a, L) / (L * phi[k]);          // ~ Exp(1) under noise
+  const NB = Math.round(40 / DF_STEP);
+  const phi = Array.from(phiRaw, (_, i) => median(phiRaw.slice(Math.max(0, i - NB), i + NB + 1)));
 
-  // Template: callsign on/off elements, then the gap, then the 100 W dash as
-  // four 0.25 s pieces. Score = sum L*(e-1) over on-elements, minus the off
-  // elements scaled so a steady carrier scores zero.
-  const onEl = el.on.map(([s, d]) => [s * DIT, d === 1 ? Ld : 3 * Ld]);
-  const offEl = el.off.filter(([, d]) => d === 3).map(([s]) => [s * DIT, 3 * Ld]);
-  offEl.push([-0.3, Math.round(0.25 * FSB)]);          // quiet before the callsign
-  const dashOn = [0, 1, 2, 3].map(q => [0.03 + q * 0.235, Ls]);   // 4 x 0.25 s inside a 1 s dash
-  const sumOn2 = onEl.reduce((s, [, L]) => s + L * L, 0) + 4 * Ls * Ls;
-  const sumOff2 = offEl.reduce((s, [, L]) => s + L * L, 0);
-  const beta = sumOn2 / sumOff2;
-  const sd = Math.sqrt(sumOn2 + beta * beta * sumOff2);
-
-  const tauMin = opts.tau ? opts.tau[0] : -0.8, tauMax = opts.tau ? opts.tau[1] : 1.5, step = 0.005;
-  const gMin = 0.10, gMax = 1.20, gStep = 0.025;
-  // Stage 1: for each frequency, the best alignment of the template (time and
-  // the callsign-to-dash gap), scored against the noise level.
-  const byK = [];
+  // Energy in one dit, relative to the noise (~Exp(1) on noise), every 2 ms, at each tone.
+  const m = Math.floor((n - Ld) / CELL) + 1;
+  const E = dfs.map((df, k) => {
+    const P = prefix(zr, zi, df), sc = 1 / (Ld * phi[k]), v = new Float32Array(m);
+    for (let i = 0; i < m; i++) v[i] = energy(P, i * CELL, Ld) * sc;
+    return v;
+  });
+  // Two corrections that keep noise looking like noise.
+  // 1. Clicks, crackle and AGC pumping raise the level at every tone at once,
+  //    whereas a beacon is one narrow tone. So the level at each moment is
+  //    measured over +-240 Hz in 31 tones with a Hann window (whose skirts die
+  //    away within a few tones, so even a very strong beacon lifts only a few
+  //    of them), as the median of the 31, and divided out.
+  {
+    const NFT = 128, HOP = 8, nb = 31, half = 15, hw = new Float64Array(Ld);
+    for (let i = 0; i < Ld; i++) hw[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * (i + 0.5) / Ld);
+    const nh = Math.floor((m - 1) / HOP) + 1, H = Array.from({ length: nb }, () => new Float64Array(nh));
+    const re = new Float64Array(NFT), im = new Float64Array(NFT);
+    for (let h = 0; h < nh; h++){
+      const a0 = h * HOP * CELL; re.fill(0); im.fill(0);
+      for (let i = 0; i < Ld && a0 + i < n; i++){ re[i] = zr[a0 + i] * hw[i]; im[i] = zi[a0 + i] * hw[i]; }
+      fftInPlace(re, im);
+      for (let b = 0; b < nb; b++){ const j = (b - half + NFT) % NFT; H[b][h] = re[j] * re[j] + im[j] * im[j]; }
+    }
+    for (let b = 0; b < nb; b++){ const md = median(H[b]); if (md > 0) for (let h = 0; h < nh; h++) H[b][h] /= md; }
+    const lev = new Float64Array(nh), col = new Float64Array(nb);
+    for (let h = 0; h < nh; h++){ for (let b = 0; b < nb; b++) col[b] = H[b][h]; lev[h] = median(col); }
+    // smooth over +-80 ms, then apply to every cell
+    const W = Math.round(40 / HOP), P = new Float64Array(nh + 1); for (let h = 0; h < nh; h++) P[h + 1] = P[h] + lev[h];
+    const sm = Float64Array.from(lev, (_, h) => { const lo = Math.max(0, h - W), hi = Math.min(nh, h + W + 1); return (P[hi] - P[lo]) / (hi - lo); });
+    // Ld-sample energy starting at cell i is centred on Hann segment (i*CELL)/(HOP*CELL)
+    for (let i = 0; i < m; i++){
+      const f = i / HOP, h0 = Math.min(nh - 1, Math.floor(f)), h1 = Math.min(nh - 1, h0 + 1), L = sm[h0] + (sm[h1] - sm[h0]) * (f - h0);
+      if (L > 0) for (let k = 0; k < dfs.length; k++) E[k][i] /= L;
+    }
+  }
+  // 2. A birdie is there all the time; a beacon, however strong, is keyed and
+  //    leaves its tone at the noise for well over 20% of the slot. So a tone
+  //    whose quietest 20% is still well above the noise holds a birdie, and is
+  //    scaled down by it.
   for (let k = 0; k < dfs.length; k++){
-    if (!kIn(k)){ byK.push({ z: -Infinity, k }); continue; }
-    Pcur = prefix(zr, zi, dfs[k]);
-    const dStart = tauMin + Tcall + gMin, dEnd = tauMax + Tcall + gMax;
-    const nD = Math.round((dEnd - dStart) / step) + 1, D = new Float64Array(nD);
-    for (let i = 0; i < nD; i++){
-      const ts = dStart + i * step; let s = 0;
-      for (const [o, L] of dashOn){ const a = jOf(ts + o); if (a < 0 || a + L > n){ s = -Infinity; break; } s += L * (e(k, a, L) - 1); }
-      D[i] = s;
-    }
-    let bk = { z: -Infinity, k };
-    for (let tau = tauMin; tau <= tauMax + 1e-9; tau += step){
-      let s = 0, ok = true;
-      for (const [o, L] of onEl){ const a = jOf(tau + o); if (a < 0 || a + L > n){ ok = false; break; } s += L * (e(k, a, L) - 1); }
-      if (!ok) continue;
-      let off = 0;
-      for (const [o, L] of offEl){ const a = jOf(tau + o); if (a < 0 || a + L > n){ ok = false; break; } off += L * (e(k, a, L) - 1); }
-      if (!ok) continue;
-      s -= beta * off;
-      let bd = -Infinity, bg = 0;
-      for (let g = gMin; g <= gMax + 1e-9; g += gStep){
-        const i = Math.round((tau + Tcall + g - dStart) / step);
-        if (i >= 0 && i < nD && D[i] > bd){ bd = D[i]; bg = g; }
+    const v = E[k], sub = []; for (let i = 0; i < m; i += 5) sub.push(v[i]);
+    sub.sort((x, y) => x - y);
+    const lev = sub[Math.floor(sub.length * 0.2)] / 0.2231;      // 20th percentile of Exp(1) is 0.2231
+    if (lev > 3) for (let i = 0; i < m; i++) v[i] /= lev;
+  }
+  const iOf = t => Math.round(jOf(t) / CELL);
+
+  // Every callsign, every tone, every start time: its best fit. The expected
+  // callsign first; then the other 17, over the same audio up to the end of
+  // that callsign. What follows it (the beacon's own 100 W dash, a second of
+  // steady tone that would fit any callsign's letters) counts for none of them.
+  const fit = (c, iMask) => {
+    const T = TPL[c], last = T.off[T.off.length - 1];
+    let b = { z: -Infinity, k: 0, tau: 0 };
+    for (let k = 0; k < dfs.length; k++){
+      const v = E[k];
+      for (let tau = TAU_MIN; tau <= TAU_MAX + 1e-9; tau += TAU_STEP){
+        const i0 = iOf(tau - QUIET * DIT);
+        if (i0 < 0 || i0 + last >= m) continue;
+        let z = 0;
+        for (let q = 0; q < T.w.length; q++){ const i = i0 + T.off[q]; z += T.w[q] * (i < iMask ? v[i] : 1); }
+        if (z > b.z) b = { z, k, tau };
       }
-      const z = (s + bd) / sd;
-      if (z > bk.z) bk = { z, k, tau, g: bg, S: s + bd };
     }
-    byK.push(bk);
-  }
-
-  // Stage 2: is it the beacon, or interference? Stage 1 scores energy against
-  // the noise level, so a steady carrier or someone else's CW can score well
-  // too. What sets the beacon apart is silence around its transmission: before
-  // its callsign (the previous beacon on this frequency has finished) and after
-  // its last dash, until the next beacon. Interference is there then as well.
-  // So measure that silence with the same 0.25 s pieces as the 100 W dash: if
-  // it holds energy both clearly above the noise and comparable with the dash,
-  // this frequency is taken by something else.
-  const gate = (k, tau, g) => {
-    const d1 = tau + Tcall + g, lastEnd = d1 + 3 * (learnedP || 1.6) + 1.0;
-    const pieces = [];
-    for (let t = Math.max(tOf(0) + 0.01, tau - 0.8); t + SUB <= tau - 0.05; t += SUB) pieces.push(t);
-    for (let t = lastEnd + 0.1; t + SUB <= Math.min(9.9, tOf(n - Ls - 1)); t += SUB) pieces.push(t);
-    const qa = pieces.map(jOf).filter(a => a >= 0 && a + Ls <= n);
-    const dv = dashOn.map(([o, L]) => { const a = jOf(d1 + o); return a >= 0 && a + L <= n ? energy(Pcur, a, L) / (L * phi[k]) : 1; });
-    const ed = dv.reduce((x, y) => x + y, 0) / dv.length;
-    // the silence is checked here and up to 15 Hz either side, so the skirt of
-    // a strong signal nearby cannot pass for a weak beacon
-    let worst = 1;
-    for (let kk = Math.max(0, k - 15); kk <= Math.min(dfs.length - 1, k + 15); kk++){
-      const Pk = kk === k ? Pcur : prefix(zr, zi, dfs[kk]);
-      const eq = qa.length ? qa.reduce((s, a) => s + energy(Pk, a, Ls) / (Ls * phi[kk]), 0) / qa.length : 1;
-      if (eq > worst) worst = eq;
-    }
-    let busy = qa.length > 0 && (worst - 1) > 3 / Math.sqrt(qa.length) && (worst - 1) > 0.15 * (ed - 1);
-    // And the callsign itself: its keyed dit-lengths against its gaps, judged by
-    // their own spread (a two-sample t statistic). Interference aligned by
-    // chance rarely matches a whole callsign.
-    const on = [], off = [];
-    for (const [s0, d] of el.on) for (let u = 0; u < d; u++) on.push(tau + (s0 + u) * DIT);
-    for (const [s0, d] of el.off) for (let u = 0; u < d; u++) off.push(tau + (s0 + u) * DIT);
-    for (let t = Math.max(tOf(0) + 0.01, tau - 0.8); t + DIT <= tau - 0.04; t += DIT) off.push(t);
-    const vals = ts => ts.map(jOf).filter(a => a >= 0 && a + Ld <= n).map(a => energy(Pcur, a, Ld) / (Ld * phi[k]));
-    const st = v => { const m = v.reduce((x, y) => x + y, 0) / v.length; return { m, v: v.reduce((x, y) => x + (y - m) ** 2, 0) / Math.max(1, v.length - 1), n: v.length }; };
-    const A = st(vals(on)), B = st(vals(off));
-    const tcall = (A.m - B.m) / Math.sqrt(A.v / A.n + B.v / B.n + 1e-12);
-    // The beacon steps its power down: the second after its 100 W dash (at any
-    // plausible spacing) holds much less energy. Interference usually does not.
-    const pieceSum = t0 => { let s = 0; for (const [o, L] of dashOn){ const a = jOf(t0 + o); if (a < 0 || a + L > n) return null; s += energy(Pcur, a, L) / (L * phi[k]) - 1; } return s; };
-    const s1 = pieceSum(d1); let s2 = Infinity;
-    for (let P = 1.0; P <= 1.6 + 1e-9; P += 0.05){ const v = pieceSum(d1 + P); if (v !== null && v < s2) s2 = v; }
-    const notStepping = s1 !== null && isFinite(s2) && s2 > 0.35 * s1;
-    busy = busy || tcall < 2.0 || notStepping;
-    return { busy, quiet: +worst.toFixed(2), dash: +ed.toFixed(2), n: qa.length, tcall: +tcall.toFixed(2), step: s1 ? +(s2 / s1).toFixed(2) : null };
+    return b;
   };
-  const cands = byK.filter(c => isFinite(c.z) && c.z >= zNeed).sort((x, y) => y.z - x.z);
-  let best = null, why = null;
-  for (const c of cands.slice(0, 12)){
-    Pcur = prefix(zr, zi, dfs[c.k]);
-    const gt = gate(c.k, c.tau, c.g);
-    if (gt.busy){ why = why || Object.assign({ df: dfs[c.k] }, gt); continue; }
-    best = Object.assign({ gate: gt }, c); break;
+  const best = {};
+  best[call] = fit(call, m);
+  const iMask = iOf(best[call].tau + TPL[call].len * DIT + 0.05);
+  for (const c of CALLS) if (c !== call) best[c] = fit(c, iMask);
+  const own = best[call];
+  // A rival may score what the beacon alone would give it (rho of the own
+  // score), plus MARGIN of the difference, plus DELTA for the luck of the
+  // best of 17 callsigns over every tone and time in plain noise.
+  let rival = null, rivalZ = -Infinity, beaten = null, excess = -Infinity;
+  for (const c of CALLS){
+    if (c === call) continue;
+    if (best[c].z > rivalZ){ rivalZ = best[c].z; rival = c; }
+    const rho = RHO[call][c], ex = best[c].z - own.z * (rho + MARGIN * (1 - rho));
+    if (ex > excess) excess = ex;
+    if (ex >= DELTA && (!beaten || ex > beaten.ex)) beaten = { call: c, ex };
   }
-  const zTop = Math.max(...byK.filter(c => isFinite(c.z)).map(c => c.z), -99);
-  const res = { heard: false, snr: null, dashes: 0, onset: null, df: null, period: null, z: +zTop.toFixed(2) };
-  if (why) res.interference = why;
-  if (!best) return res;
-
-
-  // Refine the tone to 0.25 Hz on the 100 W dash, then measure each dash.
-  const k0 = best.k, d1 = best.tau + Tcall + best.g;
-  let fBest = dfs[k0], eBest = -1;
-  for (let f = dfs[k0] - 1.5; f <= dfs[k0] + 1.5 + 1e-9; f += 0.25){
-    const Pf = prefix(zr, zi, f); let s = 0;
-    for (const [o, L] of dashOn){ const a = jOf(d1 + o); s += energy(Pf, a, L); }
-    if (s > eBest){ eBest = s; fBest = f; }
+  const res = { heard: false, snr: null, dashes: 0, onset: null, df: null, period: null,
+                z: +own.z.toFixed(2), zr: +rivalZ.toFixed(2), rival, ex: +excess.toFixed(2) };
+  if (own.z < Z_MIN){
+    if (rivalZ >= Z_MIN + 3) res.interference = { by: 'keying', rival };
+    return res;
   }
-  const Pf = prefix(zr, zi, fBest);
-  const nz = phi[k0];
+  if (beaten){ res.why = 'fits ' + beaten.call + ' as well'; res.interference = { by: 'keying', rival: beaten.call }; return res; }
+
+  // Letters confirmed on their own: a character counts when its key-down
+  // energy is clearly above the noise and not far weaker than the callsign as
+  // a whole. At least two must be confirmed. (Requiring every letter was
+  // tried: a pop landing on a dit, or a fade, wipes out a single letter, and
+  // under pops and QSB it threw away half the real beacons in tests, while
+  // false beacons were the same either way: noise is kept out by the
+  // whole-callsign match against the other 17, the gap and the dash.)
+  {
+    const T = TPL[call], v = E[own.k], i0 = iOf(own.tau - QUIET * DIT);
+    const allOn = T.chars.flatMap(c => c.cells), S = allOn.reduce((a, q) => a + v[i0 + T.off[q]] - 1, 0) / allOn.length;
+    res.letters = '';
+    let have = 0;
+    for (const c of T.chars){
+      const sum = c.cells.reduce((a, q) => a + v[i0 + T.off[q]] - 1, 0), nc = c.cells.length;
+      const ok = sum / Math.sqrt(nc) >= CHAR_Z && sum >= CHAR_FRAC * S * nc;
+      res.letters += ok ? c.ch : '_';
+      if (ok) have++;
+    }
+    if (have < MIN_LETTERS){ res.why = 'fewer than two letters confirmed ' + res.letters; return res; }
+  }
+
+  // The 100 W dash after the callsign: tone refined to 0.25 Hz, gap searched.
+  const k0 = own.k, Tcall = TPL[call].len * DIT;
+  const dashOn = [0, 1, 2, 3].map(q => [0.03 + q * 0.235, Ls]);   // 4 x 0.25 s inside a 1 s dash
+  let bestD = { s: -Infinity };
+  for (let f = dfs[k0] - 3; f <= dfs[k0] + 3 + 1e-9; f += 0.25){
+    const Pf = prefix(zr, zi, f);
+    for (let g = 0.10; g <= 1.20 + 1e-9; g += 0.025){
+      const d1 = own.tau + Tcall + g; let s = 0;
+      for (const [o, L] of dashOn){ const a = jOf(d1 + o); if (a < 0 || a + L > n){ s = -Infinity; break; } s += energy(Pf, a, L) / (L * phi[k0]) - 1; }
+      if (s > bestD.s) bestD = { s, f, d1 };
+    }
+  }
+  if (!(bestD.s >= DASH1_T)){ res.why = 'callsign but no 100 W dash'; return res; }
+  const Pf = prefix(zr, zi, bestD.f), nz = phi[k0];
   const dashE = ts => { let s = 0; for (const [o, L] of dashOn){ const a = jOf(ts + o); if (a < 0 || a + L > n) return null; s += energy(Pf, a, L) / (L * nz) - 1; } return s; };
-  const e1 = dashE(d1);
-  res.heard = true; res.dashes = 1; res.onset = +best.tau.toFixed(3); res.df = +fBest.toFixed(2); res.gate = best.gate;
-  res.snr = +(10 * Math.log10(Math.max(e1 / 4, 1e-3)) + SNR_K).toFixed(1);
+  // A beacon steps its power down 10 dB after the first dash; a carrier does not.
+  const e1 = bestD.s; let s2 = Infinity;
+  for (let P = 1.0; P <= 1.6 + 1e-9; P += 0.05){ const v = dashE(bestD.d1 + P); if (v !== null && v < s2) s2 = v; }
+  if (isFinite(s2) && s2 > 0.35 * e1){ res.why = 'no power step after the dash'; res.interference = { by: 'carrier' }; return res; }
 
-  // Dash 2: spacing from the learned value if we have one, else searched.
-  const Ps = []; if (learnedP) for (let p = learnedP - 0.04; p <= learnedP + 0.04 + 1e-9; p += 0.01) Ps.push(p);
-  else for (let p = 1.0; p <= 1.6 + 1e-9; p += 0.01) Ps.push(p);
+  // The callsign and the first dash are both sent at 100 W, with a silent gap
+  // between them. So: the gap must be quiet (well under the callsign's
+  // strength), and the dash about as strong as the callsign says it should
+  // be. Someone else's CW, which runs on through the gap and has no long dash,
+  // fails these.
+  {
+    const T = TPL[call], v = E[own.k], i0 = iOf(own.tau - QUIET * DIT);
+    const allOn = T.chars.flatMap(c => c.cells);
+    const S = allOn.reduce((a, q) => a + v[i0 + T.off[q]] - 1, 0) / allOn.length;
+    const gv = [];
+    for (let t = own.tau + Tcall + DIT; t + DIT <= bestD.d1 - 0.02; t += DIT){ const i = iOf(t); if (i >= 0 && i < m) gv.push(v[i] - 1); }
+    const gap = gv.length ? gv.reduce((a, b) => a + b, 0) / gv.length : 0;
+    if (gap > GAP_MAX * S){ res.why = 'signal in the gap before the dash'; return res; }
+    if (e1 < DASH_MIN * S){ res.why = 'dash too weak for the callsign'; return res; }
+  }
+  res.heard = true; res.dashes = 1; res.onset = +own.tau.toFixed(3); res.df = +bestD.f.toFixed(2);
+  res.snr = +(10 * Math.log10(Math.max(e1 / 4, 1e-3)) + SNR_K).toFixed(1);
+  // Dash 2 (10 W): spacing searched; then 1 W and 0.1 W at that spacing.
   let bP = null, bE = -Infinity;
-  for (const p of Ps){ const v = dashE(d1 + p); if (v !== null && v > bE){ bE = v; bP = p; } }
-  const T2 = learnedP ? DASH_T : DASH_T + 2.5;          // searching 61 spacings needs a higher bar (noise max 10.8 in 200)
-  if (bP === null || bE < T2 || bE > e1 * 0.5) return res;  // must be clearly weaker than dash 1 (nominally -10 dB)
+  for (let p = 1.0; p <= 1.6 + 1e-9; p += 0.01){ const v = dashE(bestD.d1 + p); if (v !== null && v > bE){ bE = v; bP = p; } }
+  if (bP === null || bE < DASH_T + 2.5 || bE > e1 * 0.5) return res;
   res.dashes = 2; res.period = +bP.toFixed(2);
   let prev = bE;
   for (let q = 2; q <= 3; q++){
-    const v = dashE(d1 + q * bP);
+    const v = dashE(bestD.d1 + q * bP);
     if (v === null || v < DASH_T || v > prev * 0.5) break;
     res.dashes = q + 1; prev = v;
   }
   return res;
 }
+
 let SNR_K = -27.0;                              // calibration: 10log10(e-1 per piece) -> SNR in 2.5 kHz
 function setSnrK(k){ SNR_K = k; }
 
@@ -720,14 +864,13 @@ function removeTones(x, freqs){
   return x;
 }
 
-
 onmessage = e => {
   const { id, x, t0, call, opts } = e.data;
   let r = null, tones = [];
   try {
     // steady tones in this slot, reported to the page, which follows them
     // from slot to slot; the ones it has confirmed come back in opts.notch
-    tones = findSteadyTones(x, (opts && opts.pitch) || 700);
+    tones = opts && opts.noTones ? [] : findSteadyTones(x, (opts && opts.pitch) || 700);
     if (opts && opts.notch && opts.notch.length) removeTones(x, opts.notch);
     r = analyseRaw(x, t0, call, opts);
   } catch (err) { r = { error: String(err) }; }
@@ -756,8 +899,7 @@ let lastSlotN=null, pendingSlots=[];  // slots awaiting analysis
 let curBandIdx=null, tuneAtEpoch=0;
 let results={};                       // key `${beacon}|${band}` -> latest result
 let log=[];                           // result history for CSV
-let onsets=[];                        // recent callsign start times of strong beacons (s into slot)
-let learn={ df:{}, periods:[] };      // tone offset per band and dash spacing, learned from strong beacons
+let onsets=[], timingNote='', wallRef=null;   // onsets: callsign start times of beacons heard (s into slot), for the clock check; wallRef: Date.now()-performance.now(), to spot the PC clock being set
 let tones=[];                         // steady tones (birdies) followed from slot to slot: { f, n, miss, t, db }
 let sweepQueue=[];
 let radioCoverage=null;
@@ -773,7 +915,7 @@ function saveState(){
       locator:$('locator').value, pitch:$('pitch').value, offset:$('offset').value,
       mode:$('mode').value, stay:$('stayBand').value, mapView:$('mapView').value,
       ticks: BEACON_BANDS.map((_,i)=>$('bb'+i).checked),
-      results, log: log.slice(-5000), learn, onsets, tones
+      results, log: log.slice(-5000), tones, volAffects, volTestAt
     }));
   }catch(e){}
 }
@@ -787,8 +929,12 @@ function loadState(){
     if(s.stay!==undefined) $('stayBand').value=s.stay;
     if(s.mapView==='world' || s.mapView==='azi') $('mapView').value=s.mapView;
     if(Array.isArray(s.ticks)) s.ticks.forEach((v,i)=>{ const e=$('bb'+i); if(e) e.checked=!!v; });
-    results=s.results||{}; log=s.log||[];
-    if(s.learn) learn=s.learn; if(Array.isArray(s.onsets)) onsets=s.onsets;
+    log=s.log||[];
+    // Grid results from earlier versions of the detector are not shown: it could
+    // take noise for beacons. (They stay in the log, so in the CSV export.)
+    results={}; log.filter(r=>r && r.det===2).forEach(storeResult);   // rebuilt from the log, so a catch from the last hour is shown again
+    if(s.volAffects===true || s.volAffects===false){ volAffects=s.volAffects; volTestAt=s.volTestAt||null;
+      $('volTestMsg').textContent = 'Last check'+(volTestAt?' ('+new Date(volTestAt).toISOString().slice(0,10)+')':'')+': Volume '+(volAffects?'changes':'does not change')+' the PC level. Click the button to check again.'; }
     if(Array.isArray(s.tones)) tones=s.tones.filter(q=>Date.now()-q.t < 24*3600e3);
     // Results from before the new detector gave SNR in its ~70 Hz analysis
     // bandwidth; convert them to 2.5 kHz, as reported now.
@@ -832,14 +978,104 @@ function showCoverage(cov){
 // checking the command prefix. Nothing but FA and MD is ever SET, and never
 // any MM menu item.
 let port=null, reader=null, keepReading=false, rxBuf='', pending=null, qChain=Promise.resolve();
-function catQuery(cmd, expect=true, timeout=300){
+// ── QMX level controls: Volume (AG), RF gain (RG), AGC reading (SA) ───
+// AG is in steps of 0.25 dB (AG0091 = 22.75 dB); RG is in dB and belongs to
+// the band in use; SA reads how many dB the AGC is currently taking off.
+// The QMX's Volume also sets the level of the USB audio to the PC (confirmed on a real
+// QMX), so the advice names Volume unless a check on this radio says otherwise.
+let lv={ ag:null, rg:null, sa:null, agOk:null, rgOk:null, saOk:null }, lvBusy=false, volAffects=true, volTestAt=null;
+let dragging={ ag:false, rg:false }, sendTimer={ ag:null, rg:null }, lastSend={ ag:0, rg:0 };
+const num=(r,skip)=>{ if(!r) return null; const d=r.slice(skip).replace(/[^0-9.+-]/g,''); const n=parseFloat(d); return isFinite(n)?n:null; };
+async function readLevels(){
+  if(!port || lvBusy) return;
+  lvBusy=true;
+  try{
+    const ag=await catQuery('AG;', true, 400, true);
+    if(ag!==null){ const d=ag.slice(2); lv.ag=parseInt(d.length>=4 ? d.slice(1) : d,10); lv.agOk=isFinite(lv.ag); } else if(lv.agOk===null) lv.agOk=false;
+    const rg=await catQuery('RG;', true, 400, true);
+    if(rg!==null){ lv.rg=num(rg,2); lv.rgOk=lv.rg!==null; } else if(lv.rgOk===null) lv.rgOk=false;
+    const sa=await catQuery('SA;', true, 400, true);
+    if(sa!==null){ lv.sa=num(sa,2); lv.saOk=lv.sa!==null; } else if(lv.saOk===null) lv.saOk=false;
+  } finally { lvBusy=false; }
+  showLevels();
+}
+function showLevels(){
+  const on=!!port;
+  // Volume: shown in dB; slider reaches no more than 20 dB (80 steps) above the current setting
+  const agOn=on && lv.agOk;
+  ['agSl','agDn','agUp'].forEach(id=>$(id).disabled=!agOn);
+  if(agOn && !dragging.ag){ const sl=$('agSl'); sl.max=Math.min(799, Math.max(160, lv.ag+80)); sl.value=lv.ag; }
+  $('agVal').textContent = !on ? '—' : lv.agOk===false ? 'n/a' : lv.ag===null ? '…' : (lv.ag*0.25).toFixed(2)+' dB';
+  const rgOn=on && lv.rgOk;
+  ['rgSl','rgDn','rgUp'].forEach(id=>$(id).disabled=!rgOn);
+  if(rgOn && !dragging.rg){ const sl=$('rgSl'); sl.max=Math.max(70, lv.rg+20); sl.value=lv.rg; }
+  $('rgVal').textContent = !on ? '—' : lv.rgOk===false ? 'n/a' : lv.rg===null ? '…' : lv.rg+' dB';
+  $('agcVal').textContent = !on ? 'AGC: —' : lv.saOk===false ? 'AGC reading: not available on this firmware'
+    : lv.sa===null ? 'AGC: …' : (lv.sa>0.5 ? `AGC: turning the gain down by ${lv.sa} dB` : 'AGC: not reducing the gain');
+  $('volTest').disabled = !(on && lv.agOk && ctx) || volTestRunning;
+  if(on && (lv.agOk===false || lv.rgOk===false) && !volTestRunning)
+    $('volTestMsg').textContent = 'This QMX firmware does not answer '+[lv.agOk===false?'AG (Volume)':null, lv.rgOk===false?'RG (RF gain)':null].filter(Boolean).join(' or ')+' over CAT; set it on the radio instead.';
+}
+function setLevel(which, v){
+  v=Math.max(0, Math.round(v));
+  if(which==='ag'){ v=Math.min(799,v); lv.ag=v; $('agVal').textContent=(v*0.25).toFixed(2)+' dB'; }
+  else { lv.rg=v; $('rgVal').textContent=v+' dB'; }
+  // while dragging, send at most every 200 ms so you hear it change; the final value is always sent
+  clearTimeout(sendTimer[which]);
+  const send=async()=>{
+    lastSend[which]=Date.now();
+    await catQuery(which==='ag' ? 'AG0'+String(v).padStart(3,'0')+';' : 'RG'+String(v).padStart(3,'0')+';', false);
+    setTimeout(()=>{ if(!dragging[which]) readLevels(); }, 300);   // read back what the radio accepted
+  };
+  const since=Date.now()-lastSend[which];
+  if(!dragging[which] || since>=200) send(); else sendTimer[which]=setTimeout(send, 200-since);
+}
+// Does Volume change the level sent to the PC? Lower it by 6 dB for two
+// seconds, measure, and put it back.
+let volTestRunning=false;
+async function volumeTest(){
+  if(volTestRunning || !port || !ctx) return;
+  volTestRunning=true; showLevels();
+  const msg=$('volTestMsg'), wait=ms=>new Promise(r=>setTimeout(r,ms));
+  try{
+    msg.textContent='Checking: measuring the level…';
+    await readLevels(); const v0=lv.ag;
+    if(v0===null){ msg.textContent='The QMX did not report its Volume.'; return; }
+    await wait(1500); const L0=recentRms(1400);
+    const v1 = v0>=24 ? v0-24 : v0+24;                       // 24 steps = 6 dB
+    msg.textContent=`Checking: Volume ${v1<v0?'down':'up'} 6 dB for two seconds…`;
+    await catQuery('AG0'+String(v1).padStart(3,'0')+';', false);
+    await wait(600); await wait(1500); const L1=recentRms(1400);
+    await catQuery('AG0'+String(v0).padStart(3,'0')+';', false);
+    await readLevels();
+    if(L0===null || L1===null || L0<-95){ msg.textContent='No audio to measure: check the audio input is the QMX.'; return; }
+    const d=Math.abs(L0-L1);
+    volAffects = d>=3; volTestAt=Date.now(); saveState();
+    msg.textContent = volAffects
+      ? `Yes: Volume changes the PC level (6 dB on Volume moved it ${d.toFixed(1)} dB). So when you are not listening on headphones, keep Volume where the CLIP light stays off.`
+      : `No: the PC level stayed put (moved ${d.toFixed(1)} dB for 6 dB of Volume). Volume only sets the headphones; use RF gain to set the PC level.`;
+  } catch(e){ msg.textContent='Check failed: '+e.message; }
+  finally{ volTestRunning=false; showLevels(); }
+}
+let levelPoll=null;
+
+// ── CAT log: every command sent and every reply, with UTC time ─────────
+let catLog=[];
+function logCat(line){
+  catLog.unshift(new Date(nowUtc()).toISOString().slice(11,21)+'  '+line);
+  if(catLog.length>400) catLog.length=400;
+  const el=$('catLog'); if(el) el.textContent=catLog.join('\n');
+}
+function catQuery(cmd, expect=true, timeout=300, quietRead=false){
+  const quiet = quietRead || cmd.startsWith('MM');         // menu reads and level polls: too many to log
   const run = () => new Promise(async resolve=>{
     if(!port || !port.writable){ resolve(null); return; }
     let timer=null;
     if(expect){
-      pending={ prefix: cmd.slice(0,2), done: r=>{ clearTimeout(timer); pending=null; resolve(r); } };
-      timer=setTimeout(()=>{ pending=null; resolve(null); }, timeout);
+      pending={ prefix: cmd.slice(0,2), done: r=>{ clearTimeout(timer); pending=null; if(!quiet) logCat('← '+(r===null?'?  (command not understood)':r)); resolve(r); } };
+      timer=setTimeout(()=>{ pending=null; if(!quiet) logCat('← (no reply to '+cmd+')'); resolve(null); }, timeout);
     }
+    if(!quiet) logCat('→ '+cmd);
     try{ const w=port.writable.getWriter(); await w.write(new TextEncoder().encode(cmd)); w.releaseLock(); }
     catch(e){ if(expect){ clearTimeout(timer); pending=null; } resolve(null); return; }
     if(!expect) setTimeout(()=>resolve(''), 40);
@@ -855,9 +1091,9 @@ async function readLoop(){
       let i;
       while((i=rxBuf.indexOf(';'))>=0){
         const tok = rxBuf.slice(0,i).trim(); rxBuf = rxBuf.slice(i+1);
-        if(!pending) continue;
-        if(tok==='?') pending.done(null);
-        else if(tok.startsWith(pending.prefix)) pending.done(tok);
+        if(pending && tok==='?') pending.done(null);
+        else if(pending && tok.startsWith(pending.prefix)) pending.done(tok);
+        else if(tok && !/^(MM|AG|RG|SA)/.test(tok)) logCat('← '+tok+'   (not asked for: the radio sent this by itself)');
       }
     }
   }catch(e){}
@@ -871,6 +1107,9 @@ async function catConnect(){
     await port.open({ baudRate:115200 });
     keepReading=true; readLoop();
     setPill('catPill','on','CAT open');
+    logCat('-- CAT connected'); radioStatus(); catQuery('FA;', true, 400);
+    lv={ ag:null, rg:null, sa:null, agOk:null, rgOk:null, saOk:null };
+    readLevels(); clearInterval(levelPoll); levelPoll=setInterval(()=>{ if(!tuneBusy && !volTestRunning) readLevels(); }, 2000);
     $('catBtn').disabled=true; $('catDisc').disabled=false; $('detectBtn').disabled=false;
   }catch(e){ setPill('catPill','off','CAT failed'); }
 }
@@ -878,7 +1117,9 @@ async function catDisconnect(){
   keepReading=false;
   try{ if(reader){ await reader.cancel(); reader.releaseLock(); reader=null; } }catch(e){}
   try{ if(port){ await port.close(); port=null; } }catch(e){}
+  tuneToken++; tuneVerified=null; clearInterval(levelPoll); levelPoll=null;
   setPill('catPill','off','CAT off');
+  showLevels();
   $('catBtn').disabled=false; $('catDisc').disabled=true; $('detectBtn').disabled=true;
 }
 async function detectBands(){
@@ -893,11 +1134,86 @@ async function detectBands(){
   }catch(e){ $('detectMsg').textContent='Detection failed: '+e.message; }
   finally{ $('detectBtn').disabled=!port; }
 }
-function tuneTo(bandIdx){
+// Tuning, checked. When the QMX changes band it loads that band's own memory
+// (the last frequency and mode used there, e.g. an FT8 frequency in DIGI
+// mode), which can override a frequency sent with it. So: frequency, CW mode,
+// frequency again, then read the frequency back, and retry until it matches.
+// Results are only recorded while the radio is verified on the beacon
+// frequency (see finishSlot).
+let tuneToken=0, tuneVerified=null, tuneBusy=false;   // tuneVerified: { band, at } once the radio is confirmed on the beacon frequency
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+// Which VFO the radio is receiving on (FR0 = A, FR1 = B); A if it does not say.
+async function rxVfo(){ const r=await catQuery('FR;', true, 400); return r==='FR1' ? 'B' : 'A'; }
+// The frequency the radio is actually receiving on: from the IF status line,
+// whichever VFO is in use; failing that, from that VFO directly.
+async function readFreq(){
+  const r=await catQuery('IF;', true, 500);
+  let n = r && r.length>=13 ? parseInt(r.slice(2,13),10) : NaN;
+  if(isFinite(n) && n>0) return n;
+  const v=await rxVfo(), q=await catQuery('F'+v+';', true, 500);
+  n = q ? parseInt(q.slice(2),10) : NaN;
+  return isFinite(n) && n>0 ? n : null;
+}
+async function tuneTo(bandIdx){
   curBandIdx = bandIdx;
   tuneAtEpoch = nowUtc();
+  tuneVerified = null;
   if(!port) return;
-  catQuery('FA'+String(BEACON_BANDS[bandIdx].hz).padStart(11,'0')+';', false);
+  const my = ++tuneToken, hz = BEACON_BANDS[bandIdx].hz;
+  tuneBusy = true;
+  setPill('catPill','', 'CAT tuning '+(hz/1e6).toFixed(3)+'…');
+  let got = null;
+  for(let a=0; a<4 && my===tuneToken && port; a++){
+    // tune the VFO the radio is receiving on (you may be on VFO B)
+    const vfo = await rxVfo(), fa = 'F'+vfo+String(hz).padStart(11,'0')+';';
+    if(a===0) logCat(`-- tuning VFO ${vfo} to ${(hz/1e6).toFixed(3)} MHz (${BEACON_BANDS[bandIdx].m} m)`);
+    await catQuery(fa, false); await wait(250);
+    await catQuery('MD3;', false); await wait(250);       // CW (a band change may have restored DIGI)
+    await catQuery(fa, false); await wait(300);
+    got = await readFreq();
+    if(got!==null && Math.abs(got-hz)<=20) break;
+  }
+  if(my!==tuneToken) return;                               // a newer tune took over
+  tuneBusy = false;
+  await radioStatus();
+  readLevels();                                            // RF gain belongs to the band
+  if(got!==null && Math.abs(got-hz)<=20){
+    tuneAtEpoch = nowUtc(); tuneVerified = { band:bandIdx, at:tuneAtEpoch };
+    setPill('catPill','on','CAT · '+(got/1e6).toFixed(3)+' MHz');
+    logCat(`-- on ${(got/1e6).toFixed(5)} MHz, confirmed`);
+  } else {
+    setPill('catPill','off', got!==null ? `QMX on ${(got/1e6).toFixed(3)}, not ${(hz/1e6).toFixed(3)}` : 'QMX: no frequency reply');
+    logCat(`!! could not tune: the QMX reports ${got!==null?(got/1e6).toFixed(5)+' MHz':'nothing'}`);
+    $('lastResult').textContent = got!==null
+      ? `The QMX stays on ${(got/1e6).toFixed(3)} MHz instead of ${(hz/1e6).toFixed(3)} MHz; nothing is recorded until it is on the beacon frequency. Check that ${BEACON_BANDS[bandIdx].m} m is one of the radio's bands.`
+      : 'The QMX did not report its frequency; nothing is recorded until it does.';
+  }
+}
+// The radio's full state, for the log: VFO A and B, which VFO receives and
+// transmits, and the IF status line (frequency, RIT/XIT, mode, split).
+async function radioStatus(){
+  await catQuery('FB;', true, 400);
+  await catQuery('FR;', true, 400);
+  await catQuery('FT;', true, 400);
+  const r = await catQuery('IF;', true, 400);
+  if(r && r.length>=33){
+    const f=parseInt(r.slice(2,13),10), off=r.slice(18,23), rit=r[23], xit=r[24], mode=r[29], vfo=r[30], split=r[32];
+    logCat(`   IF says: ${(f/1e6).toFixed(5)} MHz, RIT ${rit==='1'?'ON':'off'}, XIT ${xit==='1'?'ON':'off'}, offset ${off}, mode ${mode}, VFO ${vfo}, split ${split==='1'?'ON':'off'}`);
+  }
+}
+// Every slot, check the radio is still on the beacon frequency
+// (another program or the tuning knob may have moved it), and retune if not.
+let lastFreqCheckSlot=null;
+async function checkFreq(slotN){
+  if(!port || !tuneVerified || lastFreqCheckSlot===slotN) return;
+  lastFreqCheckSlot=slotN;
+  const hz=BEACON_BANDS[curBandIdx].hz, got=await readFreq();
+  if(got!==null && Math.abs(got-hz)>20 && tuneVerified){
+    logCat(`!! the QMX is now receiving on ${(got/1e6).toFixed(5)} MHz (VFO changed or retuned); retuning`);
+    await radioStatus();
+    $('lastResult').textContent=`The QMX had moved to ${(got/1e6).toFixed(3)} MHz; retuning to ${(hz/1e6).toFixed(3)} MHz.`;
+    tuneTo(curBandIdx);
+  }
 }
 
 // ── Audio ────────────────────────────────────────────────────────────
@@ -923,7 +1239,8 @@ async function startAudio(){
     node.port.onmessage=onAudio;
     const mute=ctx.createGain(); mute.gain.value=0;   // keep the graph pulling; no monitoring echo
     src.connect(node).connect(mute).connect(ctx.destination);
-    setPill('audioPill','on','Audio '+(ctx.sampleRate/1000)+' kHz');
+    setPill('audioPill','on','Audio '+(ctx.sampleRate/1000)+' kHz'); audioPillText='ok';
+    lvlHist=[]; peakHold=-120; lastClipT=-1e9; showLevels();
     $('audioBtn').textContent='Stop audio';
     $('startBtn').disabled=false;
   }catch(e){ setPill('audioPill','off','Audio error'); alert('Could not start audio: '+e.message); }
@@ -935,13 +1252,19 @@ function stopAudio(){
   if(ctx) ctx.close();
   node=null; stream=null; ctx=null;
   setPill('audioPill','off','Audio idle'); $('audioBtn').textContent='Start audio'; $('startBtn').disabled=true;
+  audioPillText=''; lvlHist=[]; $('inRms').style.width='0%'; $('inPeak').style.left='0%'; $('clipLamp').classList.remove('on');
+  $('inNums').textContent='PC input: —'; $('inAdvice').className='hint'; $('inAdvice').textContent='Start audio to see the level coming in from the QMX.'; showLevels();
 }
 function onAudio(e){
   if(!ctx || window.__beaconTest) return;          // a test feeds its own audio through __feed
+  // The time on the PC clock (Date.now) at which the context played its
+  // contextTime, then back to this block. Read against Date.now every time,
+  // like the slot schedule: performance.timeOrigin + performance.now runs on a
+  // separate timer that ignores Windows clock syncs and drifts from it.
   const ts = ctx.getOutputTimestamp();
-  const epochNow = performance.timeOrigin + ts.performanceTime + clockOffsetMs();
+  const epochNow = Date.now() - (performance.now() - ts.performanceTime) + clockOffsetMs();
   const { at, x } = e.data;
-  chunks.push({ e: epochNow + (at-ts.contextTime)*1000, x });
+  chunks.push({ e: epochNow + (at-ts.contextTime)*1000, x, clip: levelChunk(x) });
   const cutoff = epochNow - 25000;
   while(chunks.length && chunks[0].e < cutoff) chunks.shift();
   // live level: the tone at the pitch (Goertzel over this 128 ms block), in dB
@@ -955,16 +1278,54 @@ function onAudio(e){
 }
 let liveFloor=null;
 // For automated tests only: audio pushed in directly, with the epoch time of its first sample.
-if(window.__beaconTest) window.__feed = (x, e) => { chunks.push({ e, x: Float32Array.from(x) }); };
+if(window.__beaconTest) window.__feed = (x, e) => { const xx=Float32Array.from(x); chunks.push({ e, x: xx, clip: levelChunk(xx) }); };
+
+// ── Input level ──────────────────────────────────────────────────────
+// The level of the audio arriving from the QMX, in dB below the largest value
+// the PC can take (dBFS). A sample at or above -1 dBFS counts as clipping:
+// past that point the waveform is cut off, which spreads a CW tone into its
+// neighbours and raises the noise the detector has to work against.
+const CLIP_LEVEL = 0.89;                 // -1 dBFS
+let lvlHist=[], peakHold=-120, peakHoldT=0, lastClipT=-1e9, audioPillText='';
+function levelChunk(x){
+  let pk=0, ss=0, cl=0;
+  for(let i=0;i<x.length;i++){ const a=Math.abs(x[i]); if(a>pk) pk=a; ss+=x[i]*x[i]; if(a>=CLIP_LEVEL) cl++; }
+  const t=performance.now(), rms=10*Math.log10(ss/x.length+1e-20), peak=20*Math.log10(pk+1e-10);
+  lvlHist.push({ t, rms, peak, clip:cl });
+  while(lvlHist.length && lvlHist[0].t < t-60000) lvlHist.shift();
+  if(cl) lastClipT=t;
+  if(peak>=peakHold){ peakHold=peak; peakHoldT=t; } else if(t-peakHoldT>1500) peakHold=Math.max(peak, peakHold-2.5);
+  showLevel(t);
+  return cl;
+}
+const lvlPct=db=>Math.max(0,Math.min(100,(db+60)/60*100));
+function recentRms(ms){ const t=performance.now(), v=lvlHist.filter(h=>h.t>=t-ms).map(h=>h.rms); if(!v.length) return null; return 10*Math.log10(v.reduce((a,d)=>a+Math.pow(10,d/10),0)/v.length); }
+function showLevel(t){
+  const rms=recentRms(500); if(rms===null) return;
+  $('inRms').style.width=lvlPct(rms).toFixed(1)+'%';
+  $('inPeak').style.left='calc('+lvlPct(peakHold).toFixed(1)+'% - 1.5px)';
+  const clipping = t-lastClipT < 3000, nClip=lvlHist.filter(h=>h.clip).length;
+  $('clipLamp').classList.toggle('on', clipping);
+  $('inNums').textContent=`PC input: average ${rms.toFixed(1)} dBFS · peak ${peakHold.toFixed(1)} dBFS`+(nClip?` · clipping for ${(nClip*1024/8000).toFixed(1)} s of the last minute`:'');
+  // advice
+  const a=$('inAdvice'); let cls='good', msg='Good level: plenty of headroom.';
+  const what = volAffects===true ? 'Volume' : volAffects===false ? 'RF gain' : 'Volume or RF gain';
+  if(clipping){ cls='bad'; msg=`Too loud: the audio is clipping, which distorts the CW and hides weak beacons. Turn ${what} down until the CLIP light stays off.`+(volAffects===null && port?' ("Does Volume change the PC level?" finds out which one works.)':''); }
+  else if(peakHold>-6){ cls='warn'; msg=`Close to the top: less than 6 dB of headroom, so a strong signal will clip. Turn ${what} down a few dB.`; }
+  else if(rms<-75){ cls='warn'; msg='Very quiet: almost nothing is arriving. Check the audio input is the QMX, and the RF gain.'; }
+  a.className='hint '+cls; a.textContent=msg;
+  // header pill: make clipping visible from anywhere on the page
+  const want = clipping ? 'clip' : 'ok';
+  if(want!==audioPillText && ctx){ audioPillText=want; if(clipping) setPill('audioPill','off','Audio CLIPPING'); else setPill('audioPill','on','Audio '+(ctx.sampleRate/1000)+' kHz'); }
+}
 
 // ── Monitoring loop ──────────────────────────────────────────────────
 function tickedBands(){ return BEACON_BANDS.map((_,i)=>i).filter(i=>$('bb'+i).checked); }
 function startMonitor(){
   const bands = tickedBands();
   if($('mode').value==='sweep' && !bands.length){ alert('Tick at least one band.'); return; }
-  monitoring=true; lastSlotN=null; pendingSlots=[]; updateToneMsg();
+  monitoring=true; lastSlotN=null; pendingSlots=[]; updateToneMsg(); updateTiming();
   $('startBtn').disabled=true; $('stopBtn').disabled=false;
-  if(port) catQuery('MD3;', false);                 // CW mode
   if($('mode').value==='stay') tuneTo(parseInt($('stayBand').value,10));
   else { sweepQueue = bands.slice(); tuneTo(sweepQueue[0]); }
   tickTimer = setInterval(tick, 100);
@@ -980,6 +1341,17 @@ function nextSweepBand(){
 }
 let retunedThisCycle=false;
 function tick(){
+  // Windows setting the PC clock (a time sync) moves Date.now but not
+  // performance.now. Keep the audio already buffered on the new clock and
+  // relearn the callsign timing, which was measured against the old one.
+  const wd=Date.now()-performance.now();
+  if(wallRef!==null && Math.abs(wd-wallRef)>250){
+    const j=wd-wallRef;
+    chunks.forEach(c=>c.e+=j); tuneAtEpoch+=j; onsets=[];
+    timingNote=`The PC clock was just set ${j>0?'forward':'back'} by ${(Math.abs(j)/1000).toFixed(2)} s.`;
+    updateTiming();
+  }
+  wallRef=wd;
   const now=nowUtc(), s=slotOf(now);
   const slotN=Math.floor(now/10000);
   $('clockPill').textContent='UTC '+new Date(now).toISOString().slice(11,19);
@@ -991,8 +1363,9 @@ function tick(){
     retunedThisCycle=true; tuneTo(nextSweepBand());
   }
   if(s.slot===0) retunedThisCycle=false;
+  if(s.slot!==17 && s.inSlot>=9.65) checkFreq(slotN);
 
-  if(slotN!==lastSlotN){
+  if(lastSlotN===null || slotN>lastSlotN){
     lastSlotN=slotN;
     if(curBandIdx!==null) pendingSlots.push({ n:slotN, slot:s.slot, band:curBandIdx, startMs:s.startMs, tunedAt:tuneAtEpoch });
   }
@@ -1012,18 +1385,18 @@ function showNow(s){
   renderHeat(beaconAt(curBandIdx, s.slot));
 }
 const median=a=>{ const s=a.slice().sort((x,y)=>x-y); return s[Math.floor(s.length/2)]; };
-function learnedOpts(band){
+// What the detector is told: the pitch, and any steady tones to take out first.
+// Nothing learned from earlier slots: each slot is judged on its own.
+function listenOpts(){
   const o={ pitch: parseInt($('pitch').value,10)||700 };
-  if(onsets.length>=3){ const m=median(onsets); o.tau=[m-0.12, m+0.12]; }
-  const d=(learn.df[band]||[]).filter(v=>Date.now()-v.t < 2*3600e3).map(v=>v.df);
-  if(d.length>=2){ const m=median(d); o.df=[m-15, m+15]; }
-  if(learn.periods.length>=3) o.period=median(learn.periods);
   const nt=activeTones().map(q=>q.f).filter(f=>Math.abs(f-o.pitch)<=130);
   if(nt.length) o.notch=nt;
   return o;
 }
 async function finishSlot(ps){
   if(ps.tunedAt > ps.startMs - 800) return;           // band changed during this window
+  // with CAT: only while the radio is confirmed on this beacon frequency since before the window
+  if(port && !(tuneVerified && tuneVerified.band===ps.band && tuneVerified.at <= ps.startMs - 1000)) return;
   // the slot's audio from 1.0 s before it starts to 9.9 s into it, 8 kHz
   const t0ms = ps.startMs-1000, t1ms = ps.startMs+9900;
   const use = chunks.filter(c=>c.e+128 >= t0ms && c.e <= t1ms);
@@ -1033,24 +1406,21 @@ async function finishSlot(ps){
   const span = (use[use.length-1].e + 128 - use[0].e)/1000;
   if(n < 0.97*span*8000 || span < 10.5) return;       // audio dropped out, or not enough of it
   const bi = beaconAt(ps.band, ps.slot), b=BEACONS[bi];
-  const opts = learnedOpts(ps.band);
-  const res = await detect(x, (use[0].e-ps.startMs)/1000, b.call, opts);
+  const clipped = use.reduce((a,c)=>a+(c.clip||0),0);   // samples at or above -1 dBFS in this slot
+  const res = await detect(x, (use[0].e-ps.startMs)/1000, b.call, listenOpts());
   updateTones(res.tones);
   const r = res.r;
   if(!r || r.error) return;
   const rec = { ts:ps.startMs, beacon:bi, band:ps.band, heard:r.heard, snr:r.snr, dashes:r.dashes, onset:r.onset,
-                tone:r.df, z:r.z, qrm: !!r.interference && !r.heard, bw:2500 };
-  results[bi+'|'+ps.band]=rec; log.push(rec);
-  // learn from strong, unambiguous beacons only
-  if(r.heard && r.z>=15){
-    onsets.push(r.onset); if(onsets.length>20) onsets.shift(); updateTiming();
-    (learn.df[ps.band]=learn.df[ps.band]||[]).push({ df:r.df, t:Date.now() }); if(learn.df[ps.band].length>12) learn.df[ps.band].shift();
-    if(r.period!==null && r.dashes>=2){ learn.periods.push(r.period); if(learn.periods.length>20) learn.periods.shift(); }
-  }
+                tone:r.df, z:r.z, zr:r.zr, rival:r.rival, why:r.why||null, letters:r.letters||null, qrm: !!r.interference && !r.heard, bw:2500, det:2, clip: clipped };
+  storeResult(rec); log.push(rec); renderCatches();
+  // callsign start times of beacons heard, for the clock check (display only)
+  if(r.heard){ onsets.push(r.onset); if(onsets.length>20) onsets.shift(); updateTiming(); }
   const pw=['—','100 W','10 W','1 W','0.1 W'][r.dashes];
   $('lastResult').textContent = `Last result: ${b.call} on ${BEACON_BANDS[ps.band].m} m — ` +
-    (r.heard ? `heard, weakest dash ${pw}, SNR ${r.snr} dB, tone ${r.df>=0?'+':''}${r.df} Hz from pitch`
-             : (r.interference ? 'not heard (interference on the frequency)' : 'not heard'));
+    (r.heard ? `heard: callsign (letters confirmed: ${r.letters||'?'}) and the 100 W dash, weakest dash ${pw}, SNR ${r.snr} dB, tone ${r.df>=0?'+':''}${r.df} Hz from pitch`
+             : 'not heard' + (r.why ? ` (${r.why})` : r.interference ? ' (another signal was on the frequency)' : ''))
+    + (clipped ? ' — the audio was clipping during this slot, so this result is less reliable' : '');
   saveState(); renderMap(); updateCount();
 }
 // ── Steady tones ─────────────────────────────────────────────────────
@@ -1079,14 +1449,52 @@ function updateToneMsg(){
     ? `Steady tone${a.length>1?'s':''} removed: ${a.map(q=>q.f.toFixed(1)+' Hz').join(', ')}. On all the time and far narrower than a beacon (a birdie or a whistle from the PC), so ${a.length>1?'they are':'it is'} taken out before listening.`
     : (monitoring ? 'No steady tones (birdies) near the pitch.' : '');
 }
+// ── Clock check (display only) ───────────────────────────────────────
+// The NCDXF beacons are GPS-timed, so where their callsigns start shows the PC
+// clock's error plus the audio delay. The detector allows callsigns starting
+// 0.5 s early to 0.7 s late. This only reports what it sees and offers a
+// correction; nothing is changed without you clicking.
 function updateTiming(){
-  if(onsets.length<3){ $('timingMsg').textContent=`Timing: ${onsets.length} of 3 beacons needed for a check…`; return; }
-  const s=onsets.slice().sort((a,b)=>a-b), med=s[Math.floor(s.length/2)];
-  const ok=Math.abs(med)<=0.25;
-  $('timingMsg').textContent = `Timing: callsigns start ${med>=0?'+':''}${med.toFixed(2)} s into their slots (median of ${s.length} strong beacons). `
-    + (ok ? 'Clock is fine.' : 'Clock is off — suggestion: '+(-med).toFixed(2)+' s.');
-  $('applyOff').disabled = ok;
-  $('applyOff').dataset.sugg = (-med).toFixed(2);
+  $('applyOff').disabled=true;
+  if(onsets.length<3){
+    $('timingMsg').textContent=(timingNote?timingNote+' ':'')+`Clock check: ${onsets.length} of 3 beacons heard so far. `+
+      'Callsigns are looked for from 0.5 s early to 0.7 s late, so keep the PC clock synced (Windows: Settings › Time › Sync now; WSJT-X DT near 0 means it is right).';
+    return;
+  }
+  const med=median(onsets);
+  const ok=Math.abs(med)<=0.2;
+  $('timingMsg').textContent=`Clock check: callsigns start ${med>=0?'+':''}${med.toFixed(2)} s into their slots (median of ${onsets.length} beacons heard). `
+    +(ok ? 'Clock is fine.'+(timingNote?' '+timingNote:'') : 'Suggested adjustment: '+(-med).toFixed(2)+' s.');
+  if(!ok){ $('applyOff').disabled=false; $('applyOff').dataset.sugg=(-med).toFixed(2); }
+}
+// Change the clock adjustment by delta seconds, keeping the audio already
+// buffered on the same (adjusted) clock, and restart the clock check.
+function shiftClock(delta, note){
+  const cur=parseFloat($('offset').value)||0;
+  $('offset').value=(cur+delta).toFixed(2); offsetPrev=parseFloat($('offset').value)||0;
+  chunks.forEach(c=>c.e+=delta*1000); tuneAtEpoch+=delta*1000;
+  onsets=[]; timingNote=note||''; saveState(); updateTiming();
+}
+let offsetPrev=0;
+let pickedCell=null;
+
+// A beacon heard stays in its grid cell for HOLD_MS even if later tries miss
+// it; those misses are noted on it. A newer catch replaces it, and after an
+// hour a miss does too.
+const HOLD_MS = 60*60000;
+function storeResult(rec){
+  const key=rec.beacon+'|'+rec.band, prev=results[key];
+  if(!rec.heard && prev && prev.heard && rec.ts-prev.ts < HOLD_MS){ prev.lastTry=rec.ts; prev.missedSince=prev.missedSince||rec.ts; return; }
+  results[key]=rec;
+}
+function renderCatches(){
+  const el=$('catches'); if(!el) return;
+  const c=log.filter(r=>r.heard && r.det===2).slice(-200).reverse();
+  if(!c.length){ el.innerHTML='<div class="hint">None yet.</div>'; return; }
+  el.innerHTML=c.map(r=>{
+    const d=new Date(r.ts), t=d.toISOString().slice(5,10).replace('-','/')+' '+d.toISOString().slice(11,16);
+    return `<div class="row1"><span>${t}</span><b>${BEACONS[r.beacon].call}</b><span>${BEACON_BANDS[r.band].m} m</span><span>${r.snr} dB</span><span>${['','100 W','10 W','1 W','0.1 W'][r.dashes]}</span><span>${r.letters?'letters '+r.letters:''}${r.tone!==null&&r.tone!==undefined?' · tone '+(r.tone>=0?'+':'')+r.tone+' Hz':''}${r.clip?' · clipping':''}</span></div>`;
+  }).join('');
 }
 
 // ── Heat grid ────────────────────────────────────────────────────────
@@ -1111,14 +1519,17 @@ function renderHeat(curBeacon){
       const stale = now-r.ts > 15*60000 ? ' stale':'';
       const age = Math.round((now-r.ts)/60000);
       const tone = (r.tone!==undefined && r.tone!==null) ? ` · tone ${r.tone>=0?'+':''}${r.tone} Hz` : '';
-      const tip = r.heard ? `${['','100 W','10 W','1 W','0.1 W'][r.dashes]} dash heard · SNR ${r.snr} dB in 2.5 kHz${tone} · ${age} min ago`
-                          : (r.qrm ? `not heard: interference on the frequency · ${age} min ago` : `not heard · ${age} min ago`);
+      const tip = (r.heard ? `${['','100 W','10 W','1 W','0.1 W'][r.dashes]} dash heard · SNR ${r.snr} dB in 2.5 kHz${tone}${r.letters ? ' · letters '+r.letters : ''} · ${age} min ago`
+                          : (r.why ? `not heard: ${r.why} · ${age} min ago` : r.qrm ? `not heard: another signal was on the frequency · ${age} min ago` : `not heard · ${age} min ago`))
+                  + (r.clip ? ' · audio was clipping' : '')
+                  + (r.heard && r.lastTry ? ` · not heard on later tries (latest ${Math.round((now-r.lastTry)/60000)} min ago)` : '');
       h+= r.heard ? `<td class="c c${r.dashes}${stale}" title="${tip}">${r.snr}</td>`
-                  : `<td class="c c0${stale}" title="${tip}">${r.qrm?'QRM':'–'}</td>`;
+                  : `<td class="c c0${stale}" title="${tip}">–</td>`;
     });
     h+='</tr>';
   });
   $('heat').innerHTML=h;
+  if(pickedCell){ const r=$('heat').rows[pickedCell.row], c=r && r.cells[pickedCell.col]; if(c) c.classList.add('picked'); }
 }
 
 // ── Map ──────────────────────────────────────────────────────────────
@@ -1326,11 +1737,11 @@ function renderAzimuthal(){
 function updateCount(){ $('logCount').textContent = log.length+' results logged'; }
 
 function exportCsv(){
-  const rows=[['utc','band_m','freq_mhz','beacon','location','heard','weakest_dash','snr_db_2500hz','onset_s','tone_hz','score']];
+  const rows=[['utc','band_m','freq_mhz','beacon','location','heard','weakest_dash','snr_db_2500hz','onset_s','tone_hz','score','best_other_callsign','its_score','reason','other_signal','clipped_samples']];
   log.forEach(r=>rows.push([ new Date(r.ts).toISOString(), BEACON_BANDS[r.band].m, (BEACON_BANDS[r.band].hz/1e6).toFixed(3),
     BEACONS[r.beacon].call, '"'+BEACONS[r.beacon].loc+'"', r.heard?1:0,
     r.heard?['','100W','10W','1W','0.1W'][r.dashes]:'', r.snr===null||r.snr===undefined?'':r.snr, r.onset===null||r.onset===undefined?'':r.onset,
-    r.tone===null||r.tone===undefined?'':r.tone, r.z===undefined?'':r.z ]));
+    r.tone===null||r.tone===undefined?'':r.tone, r.z===undefined?'':r.z, r.rival||'', r.zr===undefined?'':r.zr, r.why?'"'+r.why+'"':'', r.qrm?1:0, r.clip===undefined?'':r.clip ]));
   const blob=new Blob([rows.map(r=>r.join(',')).join('\n')],{type:'text/csv'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
   a.download='beacon-log-'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
@@ -1346,7 +1757,7 @@ function applyTheme(t){
 
 // ── Wiring ───────────────────────────────────────────────────────────
 buildBandList();
-loadState(); updateToneMsg();
+loadState(); updateToneMsg(); offsetPrev=parseFloat($('offset').value)||0; updateTiming();
 $('stayRow').style.display = $('mode').value==='stay' ? '' : 'none';
 $('themeBtn').textContent = document.documentElement.getAttribute('data-theme')==='light' ? '☾ Dark' : '☀ Light';
 $('themeBtn').onclick=()=>applyTheme(document.documentElement.getAttribute('data-theme')==='light'?'dark':'light');
@@ -1356,19 +1767,33 @@ $('detectBtn').onclick=detectBands;
 $('startBtn').onclick=startMonitor; $('stopBtn').onclick=stopMonitor;
 $('mode').onchange=()=>{ $('stayRow').style.display=$('mode').value==='stay'?'':'none'; saveState(); };
 $('stayBand').onchange=()=>{ saveState(); if(monitoring && $('mode').value==='stay') tuneTo(parseInt($('stayBand').value,10)); };
-$('pitch').onchange=()=>{ learn.df={}; saveState(); updateToneMsg(); };   // tone offsets learned at the old pitch no longer apply
-$('offset').onchange=saveState;
+$('pitch').onchange=()=>{ saveState(); updateToneMsg(); };
+$('offset').onchange=()=>{ const v=parseFloat($('offset').value)||0, d=v-offsetPrev; $('offset').value=offsetPrev.toFixed(2); shiftClock(d, 'Adjustment changed by hand.'); };
 $('locator').oninput=()=>{ saveState(); renderMap(); renderHeat(-1); };
 $('mapBand').onchange=renderMap;
 $('mapView').onchange=()=>{ saveState(); renderMap(); };
 setInterval(()=>{ if($('mapView').value==='world') renderMap(); }, 60000);   // the night side moves
-$('applyOff').onclick=()=>{
-  const cur=parseFloat($('offset').value)||0, s=parseFloat($('applyOff').dataset.sugg)||0;
-  $('offset').value=(cur+s).toFixed(2); onsets=[]; saveState(); updateTiming();
-};
+$('applyOff').onclick=()=>{ const s=parseFloat($('applyOff').dataset.sugg)||0; shiftClock(s, 'Correction applied.'); };
+['ag','rg'].forEach(w=>{
+  const sl=$(w+'Sl');
+  sl.addEventListener('input', ()=>{ dragging[w]=true; setLevel(w, +sl.value); });
+  sl.addEventListener('change', ()=>{ dragging[w]=false; setLevel(w, +sl.value); });
+  const step=k=>()=>{ const cur=lv[w]; if(cur===null) return; setLevel(w, cur + k*(w==='ag'?4:1)); };   // 1 dB
+  $(w+'Dn').onclick=step(-1); $(w+'Up').onclick=step(+1);
+});
+$('volTest').onclick=volumeTest;
+$('heat').addEventListener('click', e=>{
+  const td=e.target.closest('td[title]'); if(!td) return;
+  const tr=td.parentElement, call=tr.cells[0].textContent.trim(), col=td.cellIndex;
+  const head=$('heat').rows[0].cells[col], band=head && col>3 ? head.firstChild.textContent.trim()+' ('+head.lastChild.textContent.trim()+' MHz)' : '';
+  pickedCell={ row:tr.rowIndex, col };
+  $('cellInfo').textContent = call+(band ? ' on '+band : '')+': '+td.title;
+  document.querySelectorAll('#heat td.picked').forEach(c=>c.classList.remove('picked')); td.classList.add('picked');
+});
 $('csvBtn').onclick=exportCsv;
-$('clearBtn').onclick=()=>{ if(confirm('Clear all beacon results?')){ results={}; log=[]; learn={ df:{}, periods:[] }; onsets=[]; tones=[]; updateToneMsg(); saveState(); renderHeat(-1); renderMap(); updateCount(); } };
-renderHeat(-1); renderMap(); updateCount();
+$('catLogCopy').onclick=async()=>{ try{ await navigator.clipboard.writeText(catLog.join('\n')); $('catLogMsg').textContent='Copied — paste it into the chat.'; }catch(e){ $('catLogMsg').textContent='Copy not allowed here; a screenshot works too.'; } };
+$('clearBtn').onclick=()=>{ if(confirm('Clear all beacon results?')){ results={}; log=[]; onsets=[]; tones=[]; updateToneMsg(); saveState(); renderHeat(-1); renderMap(); updateCount(); renderCatches(); } };
+renderHeat(-1); renderMap(); updateCount(); renderCatches();
 let lastIdleSlot=null;
 setInterval(()=>{
   if(monitoring) return;
