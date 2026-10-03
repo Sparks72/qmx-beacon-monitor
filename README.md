@@ -1,180 +1,144 @@
 # QMX Beacon Monitor
 
-**Open it:** https://sparks72.github.io/qmx-beacon-monitor/
+A browser tool that listens to the **NCDXF/IARU International Beacon Project** with a QRP Labs **QMX**, tunes the radio by CAT, and shows which of the 18 beacons you hear on 20, 17, 15, 12 and 10 m, and how strongly. It works down into the noise: a beacon too weak for one 10-second transmission can still be found by **stacking** several of its cycles.
 
-A propagation monitor for the NCDXF/IARU International Beacon Project, running
-in a web page. It follows the beacon schedule, tunes a QRP Labs QMX over CAT,
-listens to every 10-second transmission and records which beacons you hear and
-how far down their power steps you can follow them. The results fill a grid of
-18 beacons × 5 bands and a map centred on your location.
+One HTML file, nothing to install. Open it in Chrome or Edge.
 
-There is nothing to install. It works from GitHub Pages or straight from disk:
-download `index.html` and double-click it.
+---
 
-## What you need
+## What it does
 
-- Chrome or Edge on a desktop computer (Web Serial is needed for CAT).
-- A QMX (or other rig) with its USB audio connected to the PC. CAT is
-  optional: without it, tune the rig yourself and use **Stay on one band**.
-- Your Maidenhead locator, for bearings, distances and the map.
+- **Follows the beacon schedule.** 18 beacons, 5 bands, a new transmission every 10 seconds, the full cycle every 3 minutes. The display shows which beacon is on air on each band right now.
+- **Tunes the QMX for you** over USB CAT (Web Serial). It sets the VFO the radio is actually receiving on (A or B), switches to CW, reads the frequency back to confirm it, and checks again every slot. A result is only recorded while the radio is confirmed on the beacon frequency.
+- **Detects each beacon in the audio**, without decoding Morse letter by letter: see *How a beacon counts as heard* below.
+- **Stacks weak beacons.** If a slot gives no catch, it is combined with the same beacon's last 2–8 cycles on that band, and the same tests are run on the result (shown as **×N**).
+- **Propagation grid.** Each beacon × band cell keeps its **strongest catch** until you reset it, coloured by strength:
 
-## Using it
+  | Colour | Meaning |
+  |---|---|
+  | Red **–** | not heard |
+  | Pink | below −18 dB |
+  | Orange | −18 to −11 dB |
+  | Green | above −11 dB |
 
-1. **Start audio** and choose the rig's USB audio input.
-2. **Connect CAT** (optional), then **Detect radio bands**. This reads the QMX's
-   band table, read-only, and ticks the beacon bands your radio covers.
-3. Enter **your locator**.
-4. Choose a mode:
-   - **Sweep ticked bands**: three minutes on each band, so every beacon is
-     heard once per band.
-   - **Stay on one band**: follow all 18 beacons on a single frequency.
-5. Check the **CW pitch** matches your rig's CW tone (700 Hz by default).
-6. **Start monitoring.**
+  The number is the SNR of the 100 W dash in 2.5 kHz, the same scale as WSJT-X and WSPR. Click a cell for details: time, weakest dash heard (100 W / 10 W / 1 W / 0.1 W), tone, letters confirmed, how often heard, latest try.
+- **Map.** A world map with the night side shaded, or centred on you with bearing and distance. Shows the best of all bands or one band.
+- **Catches list and CSV export.** Every beacon heard, newest first, plus a full log for spreadsheets.
+- **Levels panel.**
+  - A level meter for the audio arriving at the PC, with a **CLIP** light and a warning in the header.
+  - Volume and RF gain controls for the QMX, with ±1 dB buttons, and a readout of how much the AGC is turning the gain down.
+- **Clock check.** It shows where the callsigns start relative to the slot and suggests a correction if your PC clock is off. Nothing changes until you click it.
+- **CAT log** of every command sent and every reply, for troubleshooting.
+- Light and dark theme.
 
-After a few strong beacons the **timing check** shows whether your PC clock
-agrees with the beacons (they are GPS-timed). If it doesn't, **Apply
-suggestion** corrects it.
+## Requirements
 
-Over CAT the monitor only sets the frequency (`FA`) and CW mode (`MD3;`). It
-never transmits and never changes any menu setting.
+- QRP Labs **QMX** connected by USB, giving the USB sound card and the CAT serial port.
+- **Chrome or Edge** on a PC. Web Serial and Web Audio are needed; Firefox has no Web Serial.
+- An accurate PC clock. Windows: *Settings → Time & language → Sync now*. If WSJT-X shows DT near 0, the clock is fine.
 
-## Reading the grid
+CAT is optional. Without it, tune the radio yourself and use **Stay on one band**.
 
-Each beacon sends its callsign and a dash at 100 W, then dashes at 10 W, 1 W
-and 0.1 W. Every cell shows the weakest dash heard:
+## Getting started
 
-| Colour | Heard down to | Path margin, roughly |
+1. Open `qmx-beacon-monitor.html` in Chrome or Edge.
+2. **Start audio** and pick the QMX's audio input.
+3. **Connect CAT** and pick the QMX's COM port. Close WSJT-X or any other program using that port first: Windows lets only one program open it.
+4. Optional: **Detect bands** reads the QMX's band configuration (read-only) and ticks the beacon bands your radio covers.
+5. Enter your **locator**, and set **CW pitch** to the same value as the QMX's CW pitch (sidetone). The detector searches ±100 Hz around it.
+6. Set **Volume** so the level meter stays out of the red and the CLIP light stays off. On the QMX, Volume also sets the level sent to the PC.
+7. Choose a mode, then **Start monitoring**:
+   - **Stay on one band:** each beacon comes round every 3 minutes. This is the best choice for stacking.
+   - **Sweep ticked bands:** 3 minutes per band.
+
+The first stacked results need a few cycles, so give it 10–15 minutes.
+
+## How a beacon counts as heard
+
+Each beacon sends its callsign at 22 WPM and 100 W, then four 1-second dashes at 100 W, 10 W, 1 W and 0.1 W. The schedule says which beacon to expect, so the program **checks for that callsign** rather than decoding Morse. It slides the callsign's on/off pattern across the slot, at every tone within ±100 Hz of the pitch and every start time from 0.5 s early to 0.7 s late. Using the whole callsign at once is far more sensitive than copying it letter by letter.
+
+A slot counts as a catch only if all of these hold:
+
+1. The expected callsign fits well, and **clearly better than all 17 other callsigns** over the same audio. Noise, clicks, birdies and other people's CW fit a wrong callsign just as well, so they fail here.
+2. At least **two of its letters** are confirmed on their own.
+3. The gap after the callsign is quiet, and a **100 W dash** follows that is about as strong as the callsign. It must be neither far weaker nor far stronger: callsign and first dash are sent at the same power.
+4. The **power then steps down**. A steady carrier doesn't.
+
+The 10 W, 1 W and 0.1 W dashes are then counted to give the weakest dash heard.
+
+Two more things keep noise out:
+
+- **Steady tones** (birdies, PC whistles) are found and removed before listening.
+- **Wideband bursts** (clicks, AGC pumping) are divided out.
+
+**Stacking:** each slot is kept as a compact copy, about 44 KB. A slot that gives no catch is lined up with the same beacon's earlier slots on that band, by time from the slot start and by tone, and their energies are averaged. The beacon is in the same place every cycle; the noise isn't. All the tests above are then run on the average, with the thresholds scaled for the number of cycles. One slot with someone else's strong signal can't carry a stack.
+
+## How sensitive is it?
+
+From simulated steady beacons in noise, with and without pops and clicks:
+
+| Beacon SNR (2.5 kHz) | Caught in one slot | Caught by stacking |
 |---|---|---|
-| red | 100 W | just open |
-| orange | 10 W | 10 dB in hand |
-| yellow-green | 1 W | 20 dB |
-| green | 0.1 W | 30 dB |
-| grey `–` | not heard | |
-| grey `QRM` | interference on the frequency | |
+| −14 dB | over 90% | |
+| −16 dB | about 80% | |
+| −18 dB | about 30% | |
+| −20 dB | a few % | 97% within 4 cycles |
+| −22 dB | 0% | about 90% within 8 cycles |
+| −24 dB | 0% | about 10% within 8 cycles |
 
-The number is the SNR of the 100 W dash in a 2.5 kHz bandwidth, the way WSJT-X
-and WSPR report SNR. Hover over a cell for details, including how far the tone
-was from your pitch. Results older than 15 minutes are shown faded.
+Fading beacons gain less, but still clearly.
 
-The **map** has two views. **World** shows every beacon on a world map, marked
-in the grid's colours, with great-circle paths to the ones you heard and the
-night side shaded; the line between day and night (the grey line) is often
-good for DX, and the shading moves as the day goes on. **Centred on you**
-shows true bearing and distance, for pointing a beam. **Show** picks one band
-or the best result on any band.
+In the same tests, noise, clicks, AGC pumping, birdies, other CW and wrong beacons produced no false catches in thousands of slots and stacks. Real bands are rougher than simulated noise, so treat a single catch right at the limit with some caution. A catch you can trust repeats, and shows the same tone offset as other catches on that band.
 
-**Export CSV** saves every result, with time, band, beacon, weakest dash, SNR,
-timing, tone offset and detection score. Results are kept in the browser
-between sessions.
+**On the air:** with an indoor random wire, ZS6DN (Pretoria, 9,100 km) was caught on 17 m at **−23.2 dB from 8 stacked cycles**, with a steady tone across repeated catches.
 
-## How it detects weak beacons
+## The log (CSV)
 
-The detector listens the way an experienced operator does. It knows from the
-schedule which beacon must be transmitting in each slot, so it looks for that
-beacon's own callsign at 22 WPM followed by its one-second dash. It measures in
-narrow bandwidths: the length of a dit for the callsign, and 4 Hz for each
-dash, where a simple tone filter would use about 70 Hz. It searches ±100 Hz
-around your pitch, so a small frequency error in the rig or the beacon doesn't
-lose the signal.
+**Export CSV** writes every slot analysed:
 
-As it runs, it learns from the strong beacons:
-- your clock offset (all beacons start on the same GPS tick);
-- your rig's tone offset on each band;
-- the spacing of the dashes.
+| Column | Contents |
+|---|---|
+| `utc` | Slot time, UTC |
+| `band_m` | Band, metres |
+| `freq_mhz` | Beacon frequency, MHz |
+| `beacon` | Callsign |
+| `location` | Beacon location |
+| `heard` | 1 = heard, 0 = not heard |
+| `weakest_dash` | Weakest dash heard (100W / 10W / 1W / 0.1W) |
+| `snr_db_2500hz` | SNR of the 100 W dash in 2.5 kHz |
+| `onset_s` | Callsign start, seconds from the slot start |
+| `tone_hz` | Tone, Hz from your CW pitch |
+| `score` | Callsign score |
+| `best_other_callsign`, `its_score` | Best rival callsign and its score |
+| `reason` | Why a slot was not counted |
+| `other_signal` | 1 = another signal was on the frequency |
+| `clipped_samples` | Samples at or above −1 dBFS in the slot |
+| `stacked_cycles` | Cycles stacked for this catch |
+| `stacked_reason` | Why a stack was not counted |
 
-It then searches only close to those values, which lets it pick out weaker
-beacons and ignore more interference.
+## Tips and troubleshooting
 
-Before counting a beacon as heard, it checks that the frequency is quiet before
-and after the transmission, that the callsign's gaps are quiet, and that the
-power steps down after the 100 W dash. A carrier or another station's CW fails
-these checks and is shown as **QRM**.
+- **Nothing heard at all?** Listen at 14.100 by ear, or check WSJT-X on 14.074. If it decodes few stations, the aerial is the limit, not the software. A few metres of wire outside makes a big difference.
+- **Radio not on the beacon frequency?** The CAT pill shows the frequency the QMX reports. If it says "QMX on …, not …", check that band in the QMX's band configuration (**Detect bands** shows them).
+- **CLIP light or "Audio CLIPPING":** turn Volume down. Slots recorded while clipping are marked and are not used for stacking.
+- **All catches show a similar tone offset**, e.g. −60 Hz: set the monitor's CW pitch to match the QMX's. If the offset grows with frequency, the QMX's frequency calibration is off.
+- **Clock:** callsigns are looked for from 0.5 s early to 0.7 s late, so keep the PC clock synced.
+- **Reset grid** empties the grid but keeps the log and Catches list. **Clear results** deletes everything.
 
-### Steady tones (birdies)
+## Privacy
 
-A steady tone near the pitch, such as a receiver birdie or a whistle from the
-PC or USB lead, is on all the time at one strength, and is far narrower than a
-beacon, which keys its callsign and steps its power down 30 dB within its
-10 seconds. Left alone, such a tone makes beacons look like **QRM**, and with
-noise on top it can even pass for a very weak beacon.
-
-The monitor looks for these tones in every slot. A tone seen at the same audio
-frequency in 3 slots is taken out of the audio before listening. Only about
-±0.3 Hz around it is removed, so a beacon even 2 Hz away is heard normally.
-The tones being removed are listed under the timing check. A tone that goes
-away is forgotten after 3 minutes.
-
-The analysis runs in a background worker, taking under a second per slot, so
-the page stays responsive.
-
-## Tested performance
-
-Simulated beacons with random timing and tone offsets, SNR in 2.5 kHz, compared
-with the previous version:
-
-| Signal | Previous version | This version |
-|---|---|---|
-| −8 dB | 83% heard | 100% |
-| −12 dB | 0% | 100% |
-| −16 dB | 0% | 100% |
-| −18 dB | 0% | 97% |
-| −20 dB | 0% | 80–83% |
-| −22 dB | 0% | about 40% |
-| −10 dB with fading (0.5 Hz QSB) | 13% | 100% |
-
-- **False detections:**
-  - noise alone: none in 500 slots;
-  - a steady carrier on the frequency: none;
-  - strong, continuous CW on the frequency: 3 in 40 slots before the timing was learned, none after.
-- **Accuracy:** SNR within about 1–2 dB; timing within 10 ms.
-
-These are simulations. Real-world reports are very welcome, especially the CSV
-export from a session where it reported something you disagree with.
-
-## Changes in this version
-
-- World map with the beacons, the paths you heard them on and the night side
-  shaded, as well as the bearing-and-distance map, which now has coastlines.
-- Steady tones (birdies, PC whistles) are found and removed before listening,
-  so they no longer cause false QRM or false weak detections (see above).
-  Tested on a real recording with a 706 Hz whistle from the PC/USB side: QRM
-  verdicts caused by the whistle disappeared. On simulated beacons with a
-  whistle like that 6 Hz away, beacons at −16 to −18 dB went from heard in
-  about 1 slot in 6 back to about 9 in 10, the same as with no whistle. No
-  simulated beacon, from −16 to +30 dB, was ever mistaken for a steady tone.
-
-## Earlier changes
-
-- New detector: about 12 dB more sensitive, with interference rejection
-  (see above).
-- SNR is now given in 2.5 kHz, so it reads about 15 dB lower than before.
-  Saved results are converted automatically.
-- Tone offset shown for each result, and included in the CSV.
-- VE8AT moved to its new site at Inuvik, NT.
-
-## Disclaimer
-
-Experimental software, provided as is, without warranty of any kind. To the
-extent permitted by law, no liability is accepted for any loss or damage from
-its use. Not affiliated with the NCDXF, the IARU or QRP Labs.
+Everything runs in your browser. Audio, results and settings stay on your PC (browser storage). Nothing is sent anywhere.
 
 ## Credits
 
-Coastlines: [Natural Earth](https://www.naturalearthdata.com/) 1:110m land
-(public domain), via the [world-atlas](https://github.com/topojson/world-atlas)
-package, simplified to 0.1° and embedded in the page:
+- Beacons: [NCDXF/IARU International Beacon Project](https://www.ncdxf.org/beacon/), run by the Northern California DX Foundation and the IARU.
+- Map land outlines: Natural Earth (public domain).
+- Radio: [QRP Labs QMX](https://qrp-labs.com/qmx.html).
 
-> Copyright 2013-2019 Michael Bostock. Permission to use, copy, modify, and/or
-> distribute this software for any purpose with or without fee is hereby
-> granted, provided that the above copyright notice and this permission notice
-> appear in all copies. THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR
-> DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED
-> WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE
-> LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY
-> DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-> ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
-> CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+## Author
 
+Paul Harrison, DJ0CU / G4ADF.
 
-The International Beacon Project is run by the Northern California DX
-Foundation (NCDXF) with the IARU: https://www.ncdxf.org/beacon/
+## Licence
+
+*(add your licence here)*
