@@ -18,6 +18,7 @@
   --green:#3fb950; --amber:#d29922; --red:#f85149;
   --well:#0a0d12; --pill-on-b:#1f6f2e; --pill-off-b:#6e2b28;
   --h0:#2a3544; --h1:#b3452f; --h2:#c07a1a; --h3:#9aa82a; --h4:#2f9e4b;
+  --g-miss:#7e3330; --g-miss-t:#f1cfcc; --g-weak:#e7a6a8; --g-weak-t:#3a1416; --g-mid:#e0912e; --g-mid-t:#241500; --g-good:#2f9e4b; --g-good-t:#fff;
   --map-bg:#0a0d12; --map-grid:#253041; --map-text:#8b9bb0;
   --sea1:#1d4a7c; --sea2:#143a64; --land:#4f7358; --land-edge:#76a081; --night-rgb:2,5,16; --night-max:.74; --sun:#ffd24a;
   --map-label:rgba(22,27,34,.92); --map-label-text:#e6edf5; --map-miss:#6b7a8f; --map-none:#3a4658;
@@ -29,6 +30,7 @@
   --green:#1a7f37; --amber:#9a6700; --red:#cf222e;
   --well:#e4e9ef; --pill-on-b:#8fcf9f; --pill-off-b:#eba4a8;
   --h0:#dde3ea; --h1:#e0664a; --h2:#e8a23a; --h3:#b9c63d; --h4:#3fae5c;
+  --g-miss:#d4706b; --g-miss-t:#fff; --g-weak:#f7c4c6; --g-weak-t:#5a1a1e; --g-mid:#f0a23e; --g-mid-t:#2b1a00; --g-good:#3fae5c; --g-good-t:#fff;
   --map-bg:#fbfcfe; --map-grid:#d5dde7; --map-text:#57667a;
   --sea1:#d3e7f7; --sea2:#b7d4ec; --land:#ebe5d2; --land-edge:#b3a88a; --night-rgb:12,24,60; --night-max:.45; --sun:#e0a800;
   --map-label:rgba(255,255,255,.94); --map-label-text:#1b2430; --map-miss:#8a97a8; --map-none:#c3ccd8;
@@ -89,7 +91,11 @@ table.heat tr.cur td:not(.c){background:rgba(78,161,255,.12)}
 table.heat tr.cur td.c{box-shadow:inset 0 0 0 2px var(--accent)}
 .c0{background:var(--h0);color:var(--text2)} .c1{background:var(--h1);color:#fff}
 .c2{background:var(--h2);color:#fff} .c3{background:var(--h3);color:#111} .c4{background:var(--h4);color:#fff}
+/* grid and map: strength scale (SNR of the 100 W dash) */
+.gmiss{background:var(--g-miss);color:var(--g-miss-t)} .gweak{background:var(--g-weak);color:var(--g-weak-t)}
+.gmid{background:var(--g-mid);color:var(--g-mid-t)} .ggood{background:var(--g-good);color:var(--g-good-t)}
 td.stale{opacity:.45}
+td.c sup.stk{font-size:.62em;margin-left:2px;font-weight:600;opacity:.9}
 table.heat td[title]{cursor:pointer}
 table.heat td.picked{outline:2px solid var(--accent);outline-offset:-2px}
 #cellInfo{font-size:.8rem;color:var(--text);margin-top:8px;min-height:1.2em}
@@ -104,6 +110,7 @@ table.heat td.picked{outline:2px solid var(--accent);outline-offset:-2px}
 .clip{font-size:.7rem;font-weight:700;letter-spacing:.06em;padding:2px 7px;border-radius:4px;border:1px solid var(--border);color:var(--text2);background:var(--panel2)}
 .clip.on{background:var(--red);border-color:var(--red);color:#fff}
 .scale{display:flex;justify-content:space-between;font-size:.66rem;color:var(--text2);margin:3px 38px 6px 0}
+#inNums,#inAdvice{min-height:3.1em}
 #inAdvice.bad{color:var(--red)} #inAdvice.warn{color:var(--amber)} #inAdvice.good{color:var(--green)}
 .ctlrow{display:flex;align-items:center;gap:6px;margin-bottom:8px}
 .ctlrow label{min-width:62px}
@@ -209,7 +216,7 @@ canvas#map{width:100%;display:block;margin:0 auto;border-radius:6px}
       <button id="applyOff" class="ghost" disabled>Apply suggestion</button></div>
     <div class="hint" id="timingMsg">Clock check appears after a few beacons are heard.</div>
     <div class="hint" id="toneMsg"></div>
-    <div class="hint">A beacon counts as heard only when its callsign fits clearly better than any of the other 17 callsigns, at least two of its letters are confirmed on their own, and its 100 W dash follows. With no aerial connected, nothing should be heard.</div>
+    <div class="hint">A beacon counts as heard only when its callsign fits clearly better than any of the other 17 callsigns, at least two of its letters are confirmed on their own, and its 100 W dash follows. A beacon too weak for one slot is also looked for by <b>stacking</b> its last 2–8 cycles on that band (shown as ×N); this works best with “Stay on one band”, where each beacon comes round every 3 minutes. With no aerial connected, nothing should be heard.</div>
   </div>
 </div>
 
@@ -234,9 +241,8 @@ canvas#map{width:100%;display:block;margin:0 auto;border-radius:6px}
     <div style="overflow-x:auto"><table class="heat" id="heat"></table></div>
     <div id="cellInfo" class="hint">Click a cell for its details.</div>
     <div class="legend">
-      <span class="c1">100 W</span><span class="c2">10 W</span><span class="c3">1 W</span><span class="c4">0.1 W</span>
-      <span class="c0">not heard</span>
-      <span>— weakest dash heard; number = SNR of the 100 W dash in 2.5 kHz (dB, as WSJT-X and WSPR give it). Click a cell for details. Faded = older than 15 min. A beacon heard stays in its cell for an hour, even if later tries miss it.</span>
+      <span class="gmiss">not heard</span><span class="gweak">below −18 dB</span><span class="gmid">−18 to −11 dB</span><span class="ggood">above −11 dB</span>
+      <span>— number = SNR of the 100 W dash in 2.5 kHz (dB, as WSJT-X and WSPR give it); ×N = found by stacking N cycles; the weakest dash heard is in the details. Blank = not tried yet. Click a cell for details. Each cell keeps its strongest catch until you press Reset grid; a new catch replaces it only if it is as strong or stronger.</span>
     </div>
   </div>
 
@@ -256,7 +262,8 @@ canvas#map{width:100%;display:block;margin:0 auto;border-radius:6px}
     <div class="hint" id="mapHint"></div>
     <div class="row" style="margin-top:10px">
       <button id="csvBtn" class="ghost">Export CSV</button>
-      <button id="clearBtn" class="ghost">Clear results</button>
+      <button id="resetGridBtn" class="ghost" title="Empty the grid and start afresh. The log, the Catches list and the CSV export are kept.">Reset grid</button>
+      <button id="clearBtn" class="ghost" title="Delete everything: grid, log and catches.">Clear results</button>
       <span class="hint" id="logCount" style="margin:0"></span>
     </div>
   </div>
@@ -415,6 +422,8 @@ registerProcessor('beacon-tap', RawTap);
 // the page is opened from disk.
 //
 // Method: each slot's audio is mixed down around the CW pitch and scored
+// (a slot that gives no catch is then also tried STACKED with the same
+// beacon's last few slots on that band; see STACKING in the detector)
 // against ALL 18 beacon callsigns (22 WPM keying, 0.44 s of silence before),
 // over +-100 Hz of tone and -0.5..+0.7 s of timing. The expected beacon is
 // heard only if
@@ -563,11 +572,16 @@ const DASH1_T = 14.0;       // 100 W dash: sum(e-1) over its 4 pieces
 const DASH_T = 7.0;         // later dashes, at a known spacing
 const GAP_MAX = 0.35;       // gap after the callsign: below 0.35 of the callsign's strength (beacons: 95% under 0.29)
 const DASH_MIN = 11;        // 100 W dash vs callsign strength per dit (beacons: 12-34, median 25)
+const DASH_MAX = 110;       // ...and not FAR stronger: callsign and first dash are both 100 W. Real beacons
+                            // stayed below 39 (steady) and 78 (fast flutter) in tests; on a real band (3 Oct 2026)
+                            // false catches had dashes 7-37 dB above what their callsign showed: a chance callsign
+                            // fit in the noise, then someone else's strong signal in the dash window.
+const DASH_MAX_STACK = 70;  // the same for stacks (real stacked beacons stayed below 42)
 
 function analyseRaw(x, t0, call, opts = {}){
   const pitch = opts.pitch || 700;
   if (x.length < FS * 9 || !TPL[call]) return null;
-  const { zr, zi, t0off } = baseband(x, pitch);
+  const { zr, zi, t0off } = opts._bb || baseband(x, pitch);
   const n = zr.length;
   const jOf = t => Math.round((t - t0 - t0off) * FSB);
   const Ld = Math.max(1, Math.round(DIT * FSB)), Ls = Math.round(SUB * FSB);
@@ -741,6 +755,7 @@ function analyseRaw(x, t0, call, opts = {}){
     const gap = gv.length ? gv.reduce((a, b) => a + b, 0) / gv.length : 0;
     if (gap > GAP_MAX * S){ res.why = 'signal in the gap before the dash'; return res; }
     if (e1 < DASH_MIN * S){ res.why = 'dash too weak for the callsign'; return res; }
+    if (e1 > DASH_MAX * S){ res.why = 'dash far stronger than the callsign (another signal)'; res.interference = { by: 'carrier' }; return res; }
   }
   res.heard = true; res.dashes = 1; res.onset = +own.tau.toFixed(3); res.df = +bestD.f.toFixed(2);
   res.snr = +(10 * Math.log10(Math.max(e1 / 4, 1e-3)) + SNR_K).toFixed(1);
@@ -864,21 +879,254 @@ function removeTones(x, freqs){
   return x;
 }
 
+// ════════════════════════════════════════════════════════════════════
+// STACKING (several cycles of the same beacon, combined)
+// Each beacon comes back on the same band every cycle (3 min when staying on
+// one band), on the same tone and at the same, GPS-timed moment. A weak
+// beacon that no single slot can show is still there every time, while the
+// noise is different every time. So the energy maps of the last few slots of
+// one beacon on one band are lined up on a common grid (time from the slot
+// start, tone from the pitch) and averaged: the beacon adds up, the noise
+// averages out. Phases are NOT combined (they are scrambled between cycles
+// by the ionosphere and the oscillators); only energies are, so this is
+// "incoherent" stacking. The same tests as for one slot are then run on the
+// averaged map, with every statistic scaled for the number of slots K, so
+// that noise scores the same as it does for one slot.
+// Only a compact baseband is kept per slot: +-250 Hz around the pitch at
+// 500 samples/s, about 44 KB.
+// ════════════════════════════════════════════════════════════════════
+const FSD = 500, DEC2 = FSB / FSD;                  // stored rate, decimation from FSB
+const STACK_MAX = 8;                                // slots combined at most
+const STACK_MAX_AGE_MS = 75 * 60000;                // older slots are dropped
+const STACK_STORE_MAX = 240;                        // all keys together (about 10 MB)
+const SG_DT = 0.01;                                 // stacked grid step, s
+const MAX_CALL_S = Math.max(...CALLS.map(c => callElements(c).len)) * DIT;
+const SG_T0 = TAU_MIN - QUIET * DIT - 0.05;         // grid start, s into the slot
+const SG_T1 = TAU_MAX + MAX_CALL_S + 1.6;           // grid end: callsign plus the gap before the dash
+const SG_N = Math.round((SG_T1 - SG_T0) / SG_DT) + 1;
+const stacks = new Map();                           // key -> [{ slotMs, t0d, pitch, zr, zi }]
+let stackTotal = 0;
+const TPL10 = {};
+for (const c of CALLS){
+  const T = TPL[c];
+  TPL10[c] = { w: T.w, len: T.len, chars: T.chars,
+               off: T.u.map((_, q) => Math.round(q * DIT / SG_DT)) };
+}
+
+function stackReset(){ stacks.clear(); stackTotal = 0; }
+
+// Keep this slot's compact baseband under its key.
+function stackAdd(key, slotMs, t0, pitch, bb){
+  const n = Math.floor(bb.zr.length / DEC2);
+  const zr = new Float32Array(n), zi = new Float32Array(n);
+  for (let k = 0; k < n; k++){
+    let a = 0, b = 0; for (let q = 0; q < DEC2; q++){ a += bb.zr[k * DEC2 + q]; b += bb.zi[k * DEC2 + q]; }
+    zr[k] = a / DEC2; zi[k] = b / DEC2;
+  }
+  // stored sample k is the mean of FSB samples k*DEC2 .. k*DEC2+DEC2-1
+  const t0d = t0 + bb.t0off + (DEC2 - 1) / 2 / FSB;
+  let list = stacks.get(key); if (!list){ list = []; stacks.set(key, list); }
+  list.push({ slotMs, t0d, pitch, zr, zi });
+  stackTotal++;
+  while (list.length > STACK_MAX){ list.shift(); stackTotal--; }
+  // global cap: drop the oldest slot anywhere
+  while (stackTotal > STACK_STORE_MAX){
+    let oldK = null, oldT = Infinity;
+    for (const [k, l] of stacks) if (l.length && l[0].slotMs < oldT){ oldT = l[0].slotMs; oldK = k; }
+    if (!oldK) break;
+    stacks.get(oldK).shift(); stackTotal--;
+    if (!stacks.get(oldK).length) stacks.delete(oldK);
+  }
+}
+
+// One slot's normalized energy map on the common grid: E[tone][cell], noise ~ mean 1.
+const SDF = []; for (let d = -DF_MAX; d <= DF_MAX; d += DF_STEP) SDF.push(d);
+// prefix() tunes at the FSB rate; the stored slots run at FSD, so a tone f
+// (Hz from the pitch) is asked for as f * DEC2.
+const prefixD = (zr, zi, f) => prefix(zr, zi, f * DEC2);
+function stackMap(s){
+  const n = s.zr.length, Ld = Math.max(1, Math.round(DIT * FSD));
+  // noise per tone: Welch (Hann, 0.256 s, half overlap), median, then +-40 Hz running median
+  const SEG = 128, hann = new Float64Array(SEG); let w2 = 0;
+  for (let i = 0; i < SEG; i++){ hann[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / SEG); w2 += hann[i] * hann[i]; }
+  const phiRaw = new Float64Array(SDF.length);
+  for (let k = 0; k < SDF.length; k++){
+    const w = -2 * Math.PI * SDF[k] / FSD, cw = Math.cos(w), sw = Math.sin(w), v = [];
+    for (let a = 0; a + SEG <= n; a += SEG / 2){
+      let r = 0, q = 0, c = 1, sn = 0;
+      for (let i = 0; i < SEG; i++){
+        const xr = s.zr[a + i] * hann[i], xi = s.zi[a + i] * hann[i];
+        r += xr * c - xi * sn; q += xr * sn + xi * c;
+        const c2 = c * cw - sn * sw; sn = c * sw + sn * cw; c = c2;
+      }
+      v.push((r * r + q * q) / w2);
+    }
+    phiRaw[k] = median(v) / Math.LN2;
+  }
+  const NB = Math.round(40 / DF_STEP);
+  const phi = Array.from(phiRaw, (_, i) => median(phiRaw.slice(Math.max(0, i - NB), i + NB + 1)));
+  const jd = c => Math.round((SG_T0 + c * SG_DT - s.t0d) * FSD);
+  const E = SDF.map((df, k) => {
+    const P = prefixD(s.zr, s.zi, df), sc = 1 / (Ld * phi[k]), v = new Float32Array(SG_N);
+    for (let c = 0; c < SG_N; c++){ const a = jd(c); v[c] = (a >= 0 && a + Ld <= n) ? energy(P, a, Ld) * sc : 1; }
+    return v;
+  });
+  // wideband bursts (clicks, AGC) raise all tones at once: divide out the
+  // median over the tones at each moment, smoothed over +-80 ms
+  const lev = new Float64Array(SG_N), col = new Float64Array(SDF.length);
+  for (let c = 0; c < SG_N; c++){ for (let k = 0; k < SDF.length; k++) col[k] = E[k][c]; lev[c] = median(col) / Math.LN2; }
+  const W = 8, P = new Float64Array(SG_N + 1); for (let c = 0; c < SG_N; c++) P[c + 1] = P[c] + lev[c];
+  for (let c = 0; c < SG_N; c++){
+    const lo = Math.max(0, c - W), hi = Math.min(SG_N, c + W + 1), L = (P[hi] - P[lo]) / (hi - lo);
+    if (L > 0) for (let k = 0; k < SDF.length; k++) E[k][c] /= L;
+  }
+  // a birdie is there all the time; a keyed beacon is not
+  for (let k = 0; k < SDF.length; k++){
+    const sub = Array.from(E[k]).sort((x, y) => x - y), lv = sub[Math.floor(sub.length * 0.2)] / 0.2231;
+    if (lv > 3) for (let c = 0; c < SG_N; c++) E[k][c] /= lv;
+  }
+  return { E, phi, n };
+}
+
+// The deep pass: combine the last slots of this beacon on this band and test.
+function stackAnalyse(key, call, opts = {}){
+  const now = opts.slotMs || 0, pitch = opts.pitch || 700;
+  const list = (stacks.get(key) || []).filter(s => s.pitch === pitch && now - s.slotMs <= STACK_MAX_AGE_MS);
+  const K = list.length;
+  const res = { heard: false, stacked: K, snr: null, dashes: 0, onset: null, df: null, period: null };
+  if (K < 2 || !TPL10[call]) return res;
+  const maps = list.map(stackMap);
+  // averaged map
+  const M = SDF.map((_, k) => { const v = new Float32Array(SG_N); for (const m of maps) for (let c = 0; c < SG_N; c++) v[c] += m.E[k][c]; for (let c = 0; c < SG_N; c++) v[c] /= K; return v; });
+  const rk = Math.sqrt(K);                                // noise in M is 1/sqrt(K) of one slot's
+  const cOf = t => Math.round((t - SG_T0) / SG_DT);
+  const fit = (c, cMask) => {
+    const T = TPL10[c], last = T.off[T.off.length - 1];
+    let b = { z: -Infinity, k: 0, tau: 0 };
+    for (let k = 0; k < SDF.length; k++){
+      const v = M[k];
+      for (let tau = TAU_MIN; tau <= TAU_MAX + 1e-9; tau += SG_DT){
+        const i0 = cOf(tau - QUIET * DIT);
+        if (i0 < 0 || i0 + last >= SG_N) continue;
+        let z = 0;
+        for (let q = 0; q < T.w.length; q++){ const i = i0 + T.off[q]; z += T.w[q] * (i < cMask ? v[i] : 1); }
+        z *= rk;
+        if (z > b.z) b = { z, k, tau };
+      }
+    }
+    return b;
+  };
+  const best = {};
+  best[call] = fit(call, SG_N);
+  const own = best[call];
+  const cMask = cOf(own.tau + TPL10[call].len * DIT + 0.05);
+  for (const c of CALLS) if (c !== call) best[c] = fit(c, cMask);
+  let rival = null, rivalZ = -Infinity, beaten = null;
+  for (const c of CALLS){
+    if (c === call) continue;
+    if (best[c].z > rivalZ){ rivalZ = best[c].z; rival = c; }
+    const rho = RHO[call][c], ex = best[c].z - own.z * (rho + MARGIN * (1 - rho));
+    if (ex >= DELTA && (!beaten || ex > beaten.ex)) beaten = { call: c, ex };
+  }
+  res.z = +own.z.toFixed(2); res.zr = +rivalZ.toFixed(2); res.rival = rival;
+  if (own.z < Z_MIN) return res;
+  if (beaten){ res.why = 'stacked: fits ' + beaten.call + ' as well'; return res; }
+  // letters confirmed on their own, in the averaged map
+  const T = TPL10[call], v = M[own.k], i0 = cOf(own.tau - QUIET * DIT);
+  const allOn = T.chars.flatMap(ch => ch.cells);
+  const S = allOn.reduce((a, q) => a + v[i0 + T.off[q]] - 1, 0) / allOn.length;
+  res.letters = ''; let have = 0;
+  for (const ch of T.chars){
+    const sum = ch.cells.reduce((a, q) => a + v[i0 + T.off[q]] - 1, 0), nc = ch.cells.length;
+    const ok = sum * rk / Math.sqrt(nc) >= CHAR_Z && sum >= CHAR_FRAC * S * nc;
+    res.letters += ok ? ch.ch : '_'; if (ok) have++;
+  }
+  if (have < MIN_LETTERS){ res.why = 'stacked: fewer than two letters confirmed ' + res.letters; return res; }
+  // the 100 W dash: tone refined, gap searched, energies averaged over the slots
+  const Ls = Math.round(SUB * FSD), dashOn = [0, 1, 2, 3].map(q => 0.03 + q * 0.235);
+  const Tcall = T.len * DIT, df0 = SDF[own.k];
+  const phiAt = (m, f) => m.phi[Math.max(0, Math.min(SDF.length - 1, Math.round((f + DF_MAX) / DF_STEP)))];
+  // Dash energy averaged over the slots. With 3 or more slots the strongest
+  // slot is left out, so one slot with someone else's strong signal in the
+  // dash window cannot carry the average (seen on a real band, 3 Oct 2026).
+  const KD = K >= 3 ? K - 1 : K;
+  const dashMean = (f, Ps, ts) => {
+    let tot = 0, top = -Infinity;
+    for (let s = 0; s < K; s++){
+      const sl = list[s], nz = phiAt(maps[s], f); let e = 0;
+      for (const o of dashOn){
+        const a = Math.round((ts + o - sl.t0d) * FSD);
+        if (a < 0 || a + Ls > sl.zr.length) return null;
+        e += energy(Ps[s], a, Ls) / (Ls * nz) - 1;
+      }
+      tot += e; if (e > top) top = e;
+    }
+    return K >= 3 ? (tot - top) / KD : tot / K;
+  };
+  let bestD = { s: -Infinity };
+  for (let f = df0 - 3; f <= df0 + 3 + 1e-9; f += 0.25){
+    const Ps = list.map(sl => prefixD(sl.zr, sl.zi, f));
+    for (let g = 0.10; g <= 1.20 + 1e-9; g += 0.025){
+      const d1 = own.tau + Tcall + g, e = dashMean(f, Ps, d1);
+      if (e !== null && e > bestD.s) bestD = { s: e, f, d1, Ps };
+    }
+  }
+  const thr = x => x / Math.sqrt(KD);                     // a one-slot threshold, scaled for the slots used
+  if (!(bestD.s >= thr(DASH1_T))){ res.why = 'stacked: callsign but no 100 W dash'; return res; }
+  const e1 = bestD.s;
+  {
+    const gv = [];
+    for (let t = own.tau + Tcall + DIT; t + DIT <= bestD.d1 - 0.02; t += SG_DT){ const i = cOf(t); if (i >= 0 && i < SG_N) gv.push(v[i] - 1); }
+    const gap = gv.length ? gv.reduce((a, b) => a + b, 0) / gv.length : 0;
+    if (gap > GAP_MAX * S){ res.why = 'stacked: signal in the gap before the dash'; return res; }
+    if (e1 < DASH_MIN * S){ res.why = 'stacked: dash too weak for the callsign'; return res; }
+    if (e1 > DASH_MAX_STACK * S){ res.why = 'stacked: dash far stronger than the callsign (another signal)'; return res; }
+  }
+  let s2 = Infinity;
+  for (let p = 1.0; p <= 1.6 + 1e-9; p += 0.05){ const x = dashMean(bestD.f, bestD.Ps, bestD.d1 + p); if (x !== null && x < s2) s2 = x; }
+  if (isFinite(s2) && s2 > 0.35 * e1){ res.why = 'stacked: no power step after the dash'; return res; }
+  res.heard = true; res.dashes = 1; res.onset = +own.tau.toFixed(3); res.df = +bestD.f.toFixed(2);
+  res.snr = +(10 * Math.log10(Math.max(e1 / 4, 1e-3)) + SNR_K).toFixed(1);
+  let bP = null, bE = -Infinity;
+  for (let p = 1.0; p <= 1.6 + 1e-9; p += 0.01){ const x = dashMean(bestD.f, bestD.Ps, bestD.d1 + p); if (x !== null && x > bE){ bE = x; bP = p; } }
+  if (bP === null || bE < thr(DASH_T + 2.5) || bE > e1 * 0.5) return res;
+  res.dashes = 2; res.period = +bP.toFixed(2);
+  let prev = bE;
+  for (let q = 2; q <= 3; q++){
+    const x = dashMean(bestD.f, bestD.Ps, bestD.d1 + q * bP);
+    if (x === null || x < thr(DASH_T) || x > prev * 0.5) break;
+    res.dashes = q + 1; prev = x;
+  }
+  return res;
+}
+
 onmessage = e => {
+  if (e.data && e.data.cmd === 'resetStacks'){ stackReset(); return; }
   const { id, x, t0, call, opts } = e.data;
-  let r = null, tones = [];
+  let r = null, tones = [], rs = null;
   try {
     // steady tones in this slot, reported to the page, which follows them
     // from slot to slot; the ones it has confirmed come back in opts.notch
     tones = opts && opts.noTones ? [] : findSteadyTones(x, (opts && opts.pitch) || 700);
     if (opts && opts.notch && opts.notch.length) removeTones(x, opts.notch);
-    r = analyseRaw(x, t0, call, opts);
-  } catch (err) { r = { error: String(err) }; }
-  postMessage({ id, r, tones });
+    const pitch = (opts && opts.pitch) || 700;
+    const bb = baseband(x, pitch);
+    r = analyseRaw(x, t0, call, Object.assign({}, opts, { _bb: bb }));
+    // stacking: keep this slot, and if it gave no catch, try it combined with
+    // this beacon's earlier slots on this band
+    if (opts && opts.stackKey && r && !r.error){
+      if (!opts.noStack) stackAdd(opts.stackKey, opts.slotMs, t0, pitch, bb);
+      if (!r.heard) rs = stackAnalyse(opts.stackKey, call, { pitch, slotMs: opts.slotMs });
+    }
+  } catch (err) { r = r || { error: String(err) }; }
+  postMessage({ id, r, tones, rs });
 };
 
 `;
 let detector = null, detId = 0; const detWait = new Map();
+// Stacked slots only line up if pitch and clock stay the same; when either
+// changes, the stacks start again.
+function resetStacks(){ if(detector) detector.postMessage({ cmd:'resetStacks' }); }
 function detect(x, t0, call, opts){
   if(!detector){
     detector = new Worker('data:text/javascript;charset=utf-8,' + encodeURIComponent(DETECTOR_SRC));
@@ -915,7 +1163,7 @@ function saveState(){
       locator:$('locator').value, pitch:$('pitch').value, offset:$('offset').value,
       mode:$('mode').value, stay:$('stayBand').value, mapView:$('mapView').value,
       ticks: BEACON_BANDS.map((_,i)=>$('bb'+i).checked),
-      results, log: log.slice(-5000), tones, volAffects, volTestAt
+      results, log: log.slice(-5000), tones, volAffects, volTestAt, gridResetAt
     }));
   }catch(e){}
 }
@@ -932,6 +1180,7 @@ function loadState(){
     log=s.log||[];
     // Grid results from earlier versions of the detector are not shown: it could
     // take noise for beacons. (They stay in the log, so in the CSV export.)
+    gridResetAt = s.gridResetAt || 0;
     results={}; log.filter(r=>r && r.det===2).forEach(storeResult);   // rebuilt from the log, so a catch from the last hour is shown again
     if(s.volAffects===true || s.volAffects===false){ volAffects=s.volAffects; volTestAt=s.volTestAt||null;
       $('volTestMsg').textContent = 'Last check'+(volTestAt?' ('+new Date(volTestAt).toISOString().slice(0,10)+')':'')+': Volume '+(volAffects?'changes':'does not change')+' the PC level. Click the button to check again.'; }
@@ -1240,7 +1489,7 @@ async function startAudio(){
     const mute=ctx.createGain(); mute.gain.value=0;   // keep the graph pulling; no monitoring echo
     src.connect(node).connect(mute).connect(ctx.destination);
     setPill('audioPill','on','Audio '+(ctx.sampleRate/1000)+' kHz'); audioPillText='ok';
-    lvlHist=[]; peakHold=-120; lastClipT=-1e9; showLevels();
+    lvlHist=[]; peakHold=-120; lastClipT=-1e9; lvlState={ loud:false, quiet:false }; showLevels();
     $('audioBtn').textContent='Stop audio';
     $('startBtn').disabled=false;
   }catch(e){ setPill('audioPill','off','Audio error'); alert('Could not start audio: '+e.message); }
@@ -1286,6 +1535,7 @@ if(window.__beaconTest) window.__feed = (x, e) => { const xx=Float32Array.from(x
 // past that point the waveform is cut off, which spreads a CW tone into its
 // neighbours and raises the noise the detector has to work against.
 const CLIP_LEVEL = 0.89;                 // -1 dBFS
+let lvlState={ loud:false, quiet:false };
 let lvlHist=[], peakHold=-120, peakHoldT=0, lastClipT=-1e9, audioPillText='';
 function levelChunk(x){
   let pk=0, ss=0, cl=0;
@@ -1307,13 +1557,20 @@ function showLevel(t){
   const clipping = t-lastClipT < 3000, nClip=lvlHist.filter(h=>h.clip).length;
   $('clipLamp').classList.toggle('on', clipping);
   $('inNums').textContent=`PC input: average ${rms.toFixed(1)} dBFS · peak ${peakHold.toFixed(1)} dBFS`+(nClip?` · clipping for ${(nClip*1024/8000).toFixed(1)} s of the last minute`:'');
-  // advice
+  // advice. The detector measures everything relative to the noise, so any
+  // level between about -90 dBFS and the top works equally well. Each warning
+  // has a margin (it switches on at one level and off at another) and the
+  // quiet test uses a 5 s average, so a level sitting near a border cannot
+  // make the message flip back and forth.
+  const slow=recentRms(5000);
+  if(lvlState.loud ? peakHold<-9 : peakHold>-6) lvlState.loud=!lvlState.loud;
+  if(slow!==null && (lvlState.quiet ? slow>-85 : slow<-90)) lvlState.quiet=!lvlState.quiet;
   const a=$('inAdvice'); let cls='good', msg='Good level: plenty of headroom.';
   const what = volAffects===true ? 'Volume' : volAffects===false ? 'RF gain' : 'Volume or RF gain';
   if(clipping){ cls='bad'; msg=`Too loud: the audio is clipping, which distorts the CW and hides weak beacons. Turn ${what} down until the CLIP light stays off.`+(volAffects===null && port?' ("Does Volume change the PC level?" finds out which one works.)':''); }
-  else if(peakHold>-6){ cls='warn'; msg=`Close to the top: less than 6 dB of headroom, so a strong signal will clip. Turn ${what} down a few dB.`; }
-  else if(rms<-75){ cls='warn'; msg='Very quiet: almost nothing is arriving. Check the audio input is the QMX, and the RF gain.'; }
-  a.className='hint '+cls; a.textContent=msg;
+  else if(lvlState.loud){ cls='warn'; msg=`Close to the top: less than 6 dB of headroom, so a strong signal will clip. Turn ${what} down a few dB.`; }
+  else if(lvlState.quiet){ cls='warn'; msg='Almost nothing is arriving: check the audio input is the QMX and it is not muted.'; }
+  if(a.textContent!==msg){ a.className='hint '+cls; a.textContent=msg; }
   // header pill: make clipping visible from anywhere on the page
   const want = clipping ? 'clip' : 'ok';
   if(want!==audioPillText && ctx){ audioPillText=want; if(clipping) setPill('audioPill','off','Audio CLIPPING'); else setPill('audioPill','on','Audio '+(ctx.sampleRate/1000)+' kHz'); }
@@ -1347,7 +1604,7 @@ function tick(){
   const wd=Date.now()-performance.now();
   if(wallRef!==null && Math.abs(wd-wallRef)>250){
     const j=wd-wallRef;
-    chunks.forEach(c=>c.e+=j); tuneAtEpoch+=j; onsets=[];
+    chunks.forEach(c=>c.e+=j); tuneAtEpoch+=j; onsets=[]; resetStacks();
     timingNote=`The PC clock was just set ${j>0?'forward':'back'} by ${(Math.abs(j)/1000).toFixed(2)} s.`;
     updateTiming();
   }
@@ -1407,18 +1664,24 @@ async function finishSlot(ps){
   if(n < 0.97*span*8000 || span < 10.5) return;       // audio dropped out, or not enough of it
   const bi = beaconAt(ps.band, ps.slot), b=BEACONS[bi];
   const clipped = use.reduce((a,c)=>a+(c.clip||0),0);   // samples at or above -1 dBFS in this slot
-  const res = await detect(x, (use[0].e-ps.startMs)/1000, b.call, listenOpts());
+  // stacking key: this beacon on this band. A clipped slot is not kept for stacking.
+  const res = await detect(x, (use[0].e-ps.startMs)/1000, b.call,
+    Object.assign(listenOpts(), { stackKey: ps.band+'|'+bi, slotMs: ps.startMs, noStack: clipped>0 }));
   updateTones(res.tones);
-  const r = res.r;
+  let r = res.r;
   if(!r || r.error) return;
+  const single = r;
+  if(!r.heard && res.rs && res.rs.heard) r = res.rs;      // heard only when combined with earlier cycles
+  const stacked = (r.heard && r.stacked) ? r.stacked : 0;
   const rec = { ts:ps.startMs, beacon:bi, band:ps.band, heard:r.heard, snr:r.snr, dashes:r.dashes, onset:r.onset,
-                tone:r.df, z:r.z, zr:r.zr, rival:r.rival, why:r.why||null, letters:r.letters||null, qrm: !!r.interference && !r.heard, bw:2500, det:2, clip: clipped };
+                tone:r.df, z:r.z, zr:r.zr, rival:r.rival, why:r.why||null, letters:r.letters||null, qrm: !!single.interference && !r.heard, bw:2500, det:2, clip: clipped,
+                stacked, stackWhy: (!r.heard && res.rs && res.rs.stacked>=2) ? (res.rs.why||'stacked: callsign too weak') : null };
   storeResult(rec); log.push(rec); renderCatches();
   // callsign start times of beacons heard, for the clock check (display only)
-  if(r.heard){ onsets.push(r.onset); if(onsets.length>20) onsets.shift(); updateTiming(); }
+  if(r.heard && !stacked){ onsets.push(r.onset); if(onsets.length>20) onsets.shift(); updateTiming(); }
   const pw=['—','100 W','10 W','1 W','0.1 W'][r.dashes];
   $('lastResult').textContent = `Last result: ${b.call} on ${BEACON_BANDS[ps.band].m} m — ` +
-    (r.heard ? `heard: callsign (letters confirmed: ${r.letters||'?'}) and the 100 W dash, weakest dash ${pw}, SNR ${r.snr} dB, tone ${r.df>=0?'+':''}${r.df} Hz from pitch`
+    (r.heard ? `heard${stacked?` by stacking the last ${stacked} cycles`:''}: callsign (letters confirmed: ${r.letters||'?'}) and the 100 W dash, weakest dash ${pw}, SNR ${r.snr} dB${stacked?' (average)':''}, tone ${r.df>=0?'+':''}${r.df} Hz from pitch`
              : 'not heard' + (r.why ? ` (${r.why})` : r.interference ? ' (another signal was on the frequency)' : ''))
     + (clipped ? ' — the audio was clipping during this slot, so this result is less reliable' : '');
   saveState(); renderMap(); updateCount();
@@ -1470,6 +1733,7 @@ function updateTiming(){
 // Change the clock adjustment by delta seconds, keeping the audio already
 // buffered on the same (adjusted) clock, and restart the clock check.
 function shiftClock(delta, note){
+  resetStacks();
   const cur=parseFloat($('offset').value)||0;
   $('offset').value=(cur+delta).toFixed(2); offsetPrev=parseFloat($('offset').value)||0;
   chunks.forEach(c=>c.e+=delta*1000); tuneAtEpoch+=delta*1000;
@@ -1478,14 +1742,25 @@ function shiftClock(delta, note){
 let offsetPrev=0;
 let pickedCell=null;
 
-// A beacon heard stays in its grid cell for HOLD_MS even if later tries miss
-// it; those misses are noted on it. A newer catch replaces it, and after an
-// hour a miss does too.
-const HOLD_MS = 60*60000;
+
+// Each grid cell keeps its STRONGEST catch until the grid is reset: a new
+// catch replaces it only if it is at least as strong (SNR equal or higher);
+// weaker catches and misses only update "times heard" and "latest try".
+// Cells are copies, so the log keeps every result exactly as it came.
+let gridResetAt = 0;                   // results before this are not shown in the grid
 function storeResult(rec){
+  if(rec.ts < gridResetAt) return;
   const key=rec.beacon+'|'+rec.band, prev=results[key];
-  if(!rec.heard && prev && prev.heard && rec.ts-prev.ts < HOLD_MS){ prev.lastTry=rec.ts; prev.missedSince=prev.missedSince||rec.ts; return; }
-  results[key]=rec;
+  if(prev && prev.heard){
+    const times = (prev.timesHeard||1) + (rec.heard?1:0);
+    if(rec.heard && (rec.snr??-99) >= (prev.snr??-99)){
+      results[key]=Object.assign({}, rec, { timesHeard: times, firstHeard: prev.firstHeard||prev.ts });
+    } else {
+      prev.timesHeard=times; prev.lastTry=rec.ts; prev.lastTryHeard=!!rec.heard;
+    }
+    return;
+  }
+  results[key]=Object.assign({}, rec, rec.heard ? { timesHeard:1, firstHeard:rec.ts } : {});
 }
 function renderCatches(){
   const el=$('catches'); if(!el) return;
@@ -1493,7 +1768,7 @@ function renderCatches(){
   if(!c.length){ el.innerHTML='<div class="hint">None yet.</div>'; return; }
   el.innerHTML=c.map(r=>{
     const d=new Date(r.ts), t=d.toISOString().slice(5,10).replace('-','/')+' '+d.toISOString().slice(11,16);
-    return `<div class="row1"><span>${t}</span><b>${BEACONS[r.beacon].call}</b><span>${BEACON_BANDS[r.band].m} m</span><span>${r.snr} dB</span><span>${['','100 W','10 W','1 W','0.1 W'][r.dashes]}</span><span>${r.letters?'letters '+r.letters:''}${r.tone!==null&&r.tone!==undefined?' · tone '+(r.tone>=0?'+':'')+r.tone+' Hz':''}${r.clip?' · clipping':''}</span></div>`;
+    return `<div class="row1"><span>${t}</span><b>${BEACONS[r.beacon].call}</b><span>${BEACON_BANDS[r.band].m} m</span><span>${r.snr} dB</span><span>${['','100 W','10 W','1 W','0.1 W'][r.dashes]}</span><span>${r.stacked?'stacked ×'+r.stacked+' · ':''}${r.letters?'letters '+r.letters:''}${r.tone!==null&&r.tone!==undefined?' · tone '+(r.tone>=0?'+':'')+r.tone+' Hz':''}${r.clip?' · clipping':''}</span></div>`;
   }).join('');
 }
 
@@ -1516,15 +1791,17 @@ function renderHeat(curBeacon){
     BEACON_BANDS.forEach((_,ni)=>{
       const r=results[bi+'|'+ni];
       if(!r){ h+='<td class="c"></td>'; return; }
-      const stale = now-r.ts > 15*60000 ? ' stale':'';
-      const age = Math.round((now-r.ts)/60000);
+      const stale = '';                     // catches are kept as the best so far, not faded
+      const ago = t => { const m=Math.round((now-t)/60000); return m<60 ? m+' min ago' : (m/60).toFixed(m<600?1:0)+' h ago'; };
+      const utc = t => new Date(t).toISOString().slice(11,16)+' UTC';
       const tone = (r.tone!==undefined && r.tone!==null) ? ` · tone ${r.tone>=0?'+':''}${r.tone} Hz` : '';
-      const tip = (r.heard ? `${['','100 W','10 W','1 W','0.1 W'][r.dashes]} dash heard · SNR ${r.snr} dB in 2.5 kHz${tone}${r.letters ? ' · letters '+r.letters : ''} · ${age} min ago`
-                          : (r.why ? `not heard: ${r.why} · ${age} min ago` : r.qrm ? `not heard: another signal was on the frequency · ${age} min ago` : `not heard · ${age} min ago`))
-                  + (r.clip ? ' · audio was clipping' : '')
-                  + (r.heard && r.lastTry ? ` · not heard on later tries (latest ${Math.round((now-r.lastTry)/60000)} min ago)` : '');
-      h+= r.heard ? `<td class="c c${r.dashes}${stale}" title="${tip}">${r.snr}</td>`
-                  : `<td class="c c0${stale}" title="${tip}">–</td>`;
+      const tip = (r.heard ? `best catch ${utc(r.ts)} (${ago(r.ts)}): ${r.stacked?`stacked ×${r.stacked}, average `:''}${['','100 W','10 W','1 W','0.1 W'][r.dashes]} dash heard · SNR ${r.snr} dB in 2.5 kHz${tone}${r.letters ? ' · letters '+r.letters : ''}`
+                            + ` · heard ${r.timesHeard||1}× since ${utc(r.firstHeard||r.ts)}`
+                            + (r.lastTry ? ` · latest try ${ago(r.lastTry)}: ${r.lastTryHeard?'heard (weaker)':'not heard'}` : '')
+                          : (r.why ? `not heard: ${r.why} · ${ago(r.ts)}` : r.qrm ? `not heard: another signal was on the frequency · ${ago(r.ts)}` : `not heard · ${ago(r.ts)}`))
+                  + (r.clip ? ' · audio was clipping' : '');
+      h+= r.heard ? `<td class="c ${snrClass(r)}" title="${tip}">${r.snr}${r.stacked?`<sup class="stk">×${r.stacked}</sup>`:''}</td>`
+                  : `<td class="c gmiss" title="${tip}">–</td>`;
     });
     h+='</tr>';
   });
@@ -1592,11 +1869,17 @@ function placeLabel(g, placed, x, y, text, colour){
   g.fillText(text, best[0]+w/2, best[1]+h/2+1);
   g.textBaseline='alphabetic';
 }
+// Strength scale: not heard / below -18 dB / -18 to -11 dB / above -11 dB.
+function snrClass(r){
+  if(!r || !r.heard) return 'gmiss';
+  const s = r.snr ?? -99;
+  return s < -18 ? 'gweak' : s <= -11 ? 'gmid' : 'ggood';
+}
 function markerStyle(r, now){
-  const colours=['--h0','--h1','--h2','--h3','--h4'].map(cssVar);
   const lvl = r && r.heard ? r.dashes : 0;
-  return { lvl, colour: r ? (lvl ? colours[lvl] : cssVar('--map-miss')) : cssVar('--map-none'),
-           alpha: r && now-r.ts>15*60000 ? 0.5 : 1 };
+  const scale = { gweak:'--g-weak', gmid:'--g-mid', ggood:'--g-good' };
+  return { lvl, colour: r ? (lvl ? cssVar(scale[snrClass(r)]) : cssVar('--map-miss')) : cssVar('--map-none'),
+           alpha: 1 };              // like the grid: the best catch so far, not faded
 }
 function renderMap(){
   const view=$('mapView').value;
@@ -1737,11 +2020,11 @@ function renderAzimuthal(){
 function updateCount(){ $('logCount').textContent = log.length+' results logged'; }
 
 function exportCsv(){
-  const rows=[['utc','band_m','freq_mhz','beacon','location','heard','weakest_dash','snr_db_2500hz','onset_s','tone_hz','score','best_other_callsign','its_score','reason','other_signal','clipped_samples']];
+  const rows=[['utc','band_m','freq_mhz','beacon','location','heard','weakest_dash','snr_db_2500hz','onset_s','tone_hz','score','best_other_callsign','its_score','reason','other_signal','clipped_samples','stacked_cycles','stacked_reason']];
   log.forEach(r=>rows.push([ new Date(r.ts).toISOString(), BEACON_BANDS[r.band].m, (BEACON_BANDS[r.band].hz/1e6).toFixed(3),
     BEACONS[r.beacon].call, '"'+BEACONS[r.beacon].loc+'"', r.heard?1:0,
     r.heard?['','100W','10W','1W','0.1W'][r.dashes]:'', r.snr===null||r.snr===undefined?'':r.snr, r.onset===null||r.onset===undefined?'':r.onset,
-    r.tone===null||r.tone===undefined?'':r.tone, r.z===undefined?'':r.z, r.rival||'', r.zr===undefined?'':r.zr, r.why?'"'+r.why+'"':'', r.qrm?1:0, r.clip===undefined?'':r.clip ]));
+    r.tone===null||r.tone===undefined?'':r.tone, r.z===undefined?'':r.z, r.rival||'', r.zr===undefined?'':r.zr, r.why?'"'+r.why+'"':'', r.qrm?1:0, r.clip===undefined?'':r.clip, r.stacked||'', r.stackWhy?'"'+r.stackWhy+'"':'' ]));
   const blob=new Blob([rows.map(r=>r.join(',')).join('\n')],{type:'text/csv'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
   a.download='beacon-log-'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
@@ -1767,7 +2050,7 @@ $('detectBtn').onclick=detectBands;
 $('startBtn').onclick=startMonitor; $('stopBtn').onclick=stopMonitor;
 $('mode').onchange=()=>{ $('stayRow').style.display=$('mode').value==='stay'?'':'none'; saveState(); };
 $('stayBand').onchange=()=>{ saveState(); if(monitoring && $('mode').value==='stay') tuneTo(parseInt($('stayBand').value,10)); };
-$('pitch').onchange=()=>{ saveState(); updateToneMsg(); };
+$('pitch').onchange=()=>{ saveState(); updateToneMsg(); resetStacks(); };
 $('offset').onchange=()=>{ const v=parseFloat($('offset').value)||0, d=v-offsetPrev; $('offset').value=offsetPrev.toFixed(2); shiftClock(d, 'Adjustment changed by hand.'); };
 $('locator').oninput=()=>{ saveState(); renderMap(); renderHeat(-1); };
 $('mapBand').onchange=renderMap;
@@ -1791,8 +2074,9 @@ $('heat').addEventListener('click', e=>{
   document.querySelectorAll('#heat td.picked').forEach(c=>c.classList.remove('picked')); td.classList.add('picked');
 });
 $('csvBtn').onclick=exportCsv;
+$('resetGridBtn').onclick=()=>{ if(confirm('Empty the grid and start afresh?\n\nThe log, the Catches list and the CSV export are kept.')){ gridResetAt=Date.now(); results={}; pickedCell=null; $('cellInfo').textContent='Click a cell for its details.'; saveState(); renderHeat(-1); renderMap(); } };
 $('catLogCopy').onclick=async()=>{ try{ await navigator.clipboard.writeText(catLog.join('\n')); $('catLogMsg').textContent='Copied — paste it into the chat.'; }catch(e){ $('catLogMsg').textContent='Copy not allowed here; a screenshot works too.'; } };
-$('clearBtn').onclick=()=>{ if(confirm('Clear all beacon results?')){ results={}; log=[]; onsets=[]; tones=[]; updateToneMsg(); saveState(); renderHeat(-1); renderMap(); updateCount(); renderCatches(); } };
+$('clearBtn').onclick=()=>{ if(confirm('Clear all beacon results?')){ results={}; log=[]; onsets=[]; tones=[]; gridResetAt=0; resetStacks(); updateToneMsg(); saveState(); renderHeat(-1); renderMap(); updateCount(); renderCatches(); } };
 renderHeat(-1); renderMap(); updateCount(); renderCatches();
 let lastIdleSlot=null;
 setInterval(()=>{
