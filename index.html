@@ -204,7 +204,7 @@ canvas#map{width:100%;display:block;margin:0 auto;border-radius:6px}
       <input type="text" id="locator" placeholder="e.g. JO31ks" maxlength="6" class="mono"></div>
     <div class="row"><label for="mode">Mode</label>
       <select id="mode">
-        <option value="sweep">Sweep ticked bands (3 min each)</option>
+        <option value="sweep">Sweep ticked bands (all 18 beacons on each)</option>
         <option value="stay">Stay on one band</option>
       </select></div>
     <div class="row" id="stayRow" style="display:none"><label for="stayBand">Band</label>
@@ -228,7 +228,7 @@ canvas#map{width:100%;display:block;margin:0 auto;border-radius:6px}
       <div><div class="big" id="nowBeacon">—</div><div class="sub" id="nowLoc">beacon</div></div>
       <div><div class="big mono" id="nowPath">—</div><div class="sub">bearing · distance</div></div>
       <div style="flex:1;min-width:160px">
-        <div class="sub">signal at pitch</div>
+        <div class="sub">tone near pitch (±200 Hz)</div>
         <div class="lvl"><div id="lvlBar"></div></div>
       </div>
     </div>
@@ -425,7 +425,7 @@ registerProcessor('beacon-tap', RawTap);
 // (a slot that gives no catch is then also tried STACKED with the same
 // beacon's last few slots on that band; see STACKING in the detector)
 // against ALL 18 beacon callsigns (22 WPM keying, 0.44 s of silence before),
-// over +-100 Hz of tone and -0.5..+0.7 s of timing. The expected beacon is
+// over +-200 Hz of tone and -0.5..+0.7 s of timing. The expected beacon is
 // heard only if
 //   - its own callsign fits well (noise alone never reached the bar in tests),
 //   - it fits clearly better than every other callsign (noise, clicks,
@@ -555,7 +555,7 @@ const RHO = (() => {
   return r;
 })();
 
-const DF_MAX = 100, DF_STEP = 4;           // tone search, Hz from the pitch (a dit is ~18 Hz wide)
+const DF_MAX = 200, DF_STEP = 4;           // tone search, Hz from the pitch (a dit is ~18 Hz wide)
 const TAU_MIN = -0.5, TAU_MAX = 0.7, TAU_STEP = 0.01;   // callsign start, s into the slot. The beacons are GPS-timed: with
                                                          // the PC clock right a callsign starts within a few tenths of the slot start. Was
                                                          // +1.5 s; a false 5Z4B catch on a real band (2 Oct 2026) started at +1.41 s.
@@ -617,6 +617,7 @@ function analyseRaw(x, t0, call, opts = {}){
     return v;
   });
   // Two corrections that keep noise looking like noise.
+  let zrN = zr, ziN = zi;                // the baseband with correction 1 applied, for the dashes
   // 1. Clicks, crackle and AGC pumping raise the level at every tone at once,
   //    whereas a beacon is one narrow tone. So the level at each moment is
   //    measured over +-240 Hz in 31 tones with a Hann window (whose skirts die
@@ -636,14 +637,43 @@ function analyseRaw(x, t0, call, opts = {}){
     for (let b = 0; b < nb; b++){ const md = median(H[b]); if (md > 0) for (let h = 0; h < nh; h++) H[b][h] /= md; }
     const lev = new Float64Array(nh), col = new Float64Array(nb);
     for (let h = 0; h < nh; h++){ for (let b = 0; b < nb; b++) col[b] = H[b][h]; lev[h] = median(col); }
-    // smooth over +-80 ms, then apply to every cell
-    const W = Math.round(40 / HOP), P = new Float64Array(nh + 1); for (let h = 0; h < nh; h++) P[h + 1] = P[h] + lev[h];
-    const sm = Float64Array.from(lev, (_, h) => { const lo = Math.max(0, h - W), hi = Math.min(nh, h + W + 1); return (P[hi] - P[lo]) / (hi - lo); });
+    // smooth over +-80 ms, then apply to every cell. Where the level steps by
+    // more than 3x and stays there (compared over 240 ms either side), only
+    // the side this moment belongs to is averaged: a strong beacon makes the
+    // receiver's AGC clamp down as it starts and hold for the whole callsign,
+    // and the loud noise just before it, carried into the first letter,
+    // blurred the callsign towards a rival's. In plain noise, and with level
+    // changes that come and go within a letter (clicks, AGC pumping between
+    // the dits), the two sides never differ that much, so nothing changes.
+    const W = Math.round(40 / HOP), WS = 3 * W, P = new Float64Array(nh + 1); for (let h = 0; h < nh; h++) P[h + 1] = P[h] + lev[h];
+    const avg = (lo, hi) => (P[hi] - P[lo]) / (hi - lo);
+    const sm = Float64Array.from(lev, (_, h) => {
+      const lo = Math.max(0, h - W), hi = Math.min(nh, h + W + 1);
+      const L2 = avg(Math.max(0, h - WS), h + 1), R2 = avg(h, Math.min(nh, h + WS + 1));
+      if (L2 > 3 * R2 || R2 > 3 * L2){
+        const l = avg(lo, h + 1), r = avg(h, hi), x = Math.log(Math.max(lev[h], 1e-12));
+        return Math.abs(x - Math.log(l)) < Math.abs(x - Math.log(r)) ? l : r;
+      }
+      return avg(lo, hi);
+    });
     // Ld-sample energy starting at cell i is centred on Hann segment (i*CELL)/(HOP*CELL)
     for (let i = 0; i < m; i++){
       const f = i / HOP, h0 = Math.min(nh - 1, Math.floor(f)), h1 = Math.min(nh - 1, h0 + 1), L = sm[h0] + (sm[h1] - sm[h0]) * (f - h0);
       if (L > 0) for (let k = 0; k < dfs.length; k++) E[k][i] /= L;
     }
+    // The same level, sample by sample, for the dashes. A strong beacon makes
+    // the receiver's AGC turn the gain down, which holds the audio level
+    // steady: the 10 dB steps between the dashes, and the dash's strength
+    // against the callsign, then only show once the level at each moment is
+    // divided out. (Measured on the raw audio, every beacon 20 dB or more
+    // above the noise failed "no power step" once it had been through an AGC.)
+    zrN = new Float32Array(n); ziN = new Float32Array(n);
+    for (let j = 0; j < n; j++){
+      const f = Math.max(0, (j - Ld / 2) / (HOP * CELL)), h0 = Math.min(nh - 1, Math.floor(f)), h1 = Math.min(nh - 1, h0 + 1);
+      const L = sm[h0] + (sm[h1] - sm[h0]) * Math.min(1, f - h0), g = L > 0 ? 1 / Math.sqrt(L) : 1;
+      zrN[j] = zr[j] * g; ziN[j] = zi[j] * g;
+    }
+    if (opts._bb){ opts._bb.zrN = zrN; opts._bb.ziN = ziN; }   // for stacking
   }
   // 2. A birdie is there all the time; a beacon, however strong, is keyed and
   //    leaves its tone at the noise for well over 20% of the slot. So a tone
@@ -726,7 +756,7 @@ function analyseRaw(x, t0, call, opts = {}){
   const dashOn = [0, 1, 2, 3].map(q => [0.03 + q * 0.235, Ls]);   // 4 x 0.25 s inside a 1 s dash
   let bestD = { s: -Infinity };
   for (let f = dfs[k0] - 3; f <= dfs[k0] + 3 + 1e-9; f += 0.25){
-    const Pf = prefix(zr, zi, f);
+    const Pf = prefix(zrN, ziN, f);
     for (let g = 0.10; g <= 1.20 + 1e-9; g += 0.025){
       const d1 = own.tau + Tcall + g; let s = 0;
       for (const [o, L] of dashOn){ const a = jOf(d1 + o); if (a < 0 || a + L > n){ s = -Infinity; break; } s += energy(Pf, a, L) / (L * phi[k0]) - 1; }
@@ -734,7 +764,7 @@ function analyseRaw(x, t0, call, opts = {}){
     }
   }
   if (!(bestD.s >= DASH1_T)){ res.why = 'callsign but no 100 W dash'; return res; }
-  const Pf = prefix(zr, zi, bestD.f), nz = phi[k0];
+  const Pf = prefix(zrN, ziN, bestD.f), nz = phi[k0];
   const dashE = ts => { let s = 0; for (const [o, L] of dashOn){ const a = jOf(ts + o); if (a < 0 || a + L > n) return null; s += energy(Pf, a, L) / (L * nz) - 1; } return s; };
   // A beacon steps its power down 10 dB after the first dash; a carrier does not.
   const e1 = bestD.s; let s2 = Infinity;
@@ -811,7 +841,7 @@ function fftInPlace(re, im){
   }
 }
 
-const TONE_RANGE = 130;       // Hz either side of the pitch (the detector searches +-100)
+const TONE_RANGE = 230;       // Hz either side of the pitch (the detector searches +-200)
 const TONE_MIN_DB = 12;       // line above the local noise, in the ~0.14 Hz resolution of a 10.9 s slot
 const TONE_STEADY_DB = 6;     // strongest vs weakest of five 2.2 s blocks
 
@@ -1115,13 +1145,12 @@ onmessage = e => {
     // stacking: keep this slot, and if it gave no catch, try it combined with
     // this beacon's earlier slots on this band
     if (opts && opts.stackKey && r && !r.error){
-      if (!opts.noStack) stackAdd(opts.stackKey, opts.slotMs, t0, pitch, bb);
+      if (!opts.noStack) stackAdd(opts.stackKey, opts.slotMs, t0, pitch, bb.zrN ? { zr: bb.zrN, zi: bb.ziN, t0off: bb.t0off } : bb);
       if (!r.heard) rs = stackAnalyse(opts.stackKey, call, { pitch, slotMs: opts.slotMs });
     }
   } catch (err) { r = r || { error: String(err) }; }
   postMessage({ id, r, tones, rs });
 };
-
 `;
 let detector = null, detId = 0; const detWait = new Map();
 // Stacked slots only line up if pitch and clock stay the same; when either
@@ -1404,6 +1433,7 @@ async function readFreq(){
   return isFinite(n) && n>0 ? n : null;
 }
 async function tuneTo(bandIdx){
+  if(bandIdx!==curBandIdx){ sweepDone=0; sweepElapsed=0; }   // a new band visit (sweep)
   curBandIdx = bandIdx;
   tuneAtEpoch = nowUtc();
   tuneVerified = null;
@@ -1516,18 +1546,33 @@ function onAudio(e){
   chunks.push({ e: epochNow + (at-ts.contextTime)*1000, x, clip: levelChunk(x) });
   const cutoff = epochNow - 25000;
   while(chunks.length && chunks[0].e < cutoff) chunks.shift();
-  // live level: the tone at the pitch (Goertzel over this 128 ms block), in dB
-  // over a slowly following floor
-  const p=parseInt($('pitch').value,10)||700, c=2*Math.cos(2*Math.PI*p/8000);
-  let s1=0,s2=0; for(let i=0;i<x.length;i++){ const s0=x[i]+c*s1-s2; s2=s1; s1=s0; }
-  const mx=Math.sqrt(Math.max(0,s1*s1+s2*s2-c*s1*s2));
-  liveFloor = liveFloor===null ? mx : (mx<liveFloor ? liveFloor+0.3*(mx-liveFloor) : liveFloor+0.01*(mx-liveFloor));
-  const db = 20*Math.log10((mx+1e-12)/(liveFloor+1e-12));
-  $('lvlBar').style.width = Math.max(0,Math.min(100, db*3)).toFixed(0)+'%';
+  showLive(x);
 }
-let liveFloor=null;
+// Live meter: the strongest tone within +-200 Hz of the pitch (the range the
+// detector searches, since beacons often arrive off the pitch), in dB over the
+// median of that range, so it shows a tone standing out of the noise rather
+// than the noise level. Plain noise reads about 7 dB this way, so that is
+// subtracted and noise rests near zero. It rises quickly and falls back over
+// about 1.5 s, like an S-meter, instead of following every 128 ms swing.
+const LIVE_N=1024, LIVE_HANN=Float64Array.from({length:LIVE_N}, (_,i)=>0.5-0.5*Math.cos(2*Math.PI*(i+0.5)/LIVE_N));
+const LIVE_NOISE_DB=9.3, LIVE_FULL_DB=25;   // noise peak-over-median over +-200 Hz averages ~8 dB; the fast attack follows its peaks, so 9.3 keeps plain noise at the bottom
+let liveDisp=0;
+function showLive(x){
+  if(x.length<LIVE_N) return;
+  const p=parseInt($('pitch').value,10)||700, pw=[];
+  for(let df=-200; df<=200+1e-9; df+=8000/LIVE_N){
+    const c=2*Math.cos(2*Math.PI*(p+df)/8000); let s1=0,s2=0;
+    for(let i=0;i<LIVE_N;i++){ const s0=x[i]*LIVE_HANN[i]+c*s1-s2; s2=s1; s1=s0; }
+    pw.push(Math.max(0,s1*s1+s2*s2-c*s1*s2));
+  }
+  pw.sort((a,b)=>a-b);
+  const db=Math.max(0, 10*Math.log10((pw[pw.length-1]+1e-20)/(pw[pw.length>>1]+1e-20)) - LIVE_NOISE_DB);
+  liveDisp = db>liveDisp ? liveDisp+0.6*(db-liveDisp) : liveDisp+0.08*(db-liveDisp);   // fast up, slow down
+  $('lvlBar').style.width = Math.min(100, liveDisp/LIVE_FULL_DB*100).toFixed(1)+'%';
+  $('lvlBar').parentElement.title = `Strongest tone within ±200 Hz of the pitch: ${liveDisp.toFixed(0)} dB above the noise`;
+}
 // For automated tests only: audio pushed in directly, with the epoch time of its first sample.
-if(window.__beaconTest) window.__feed = (x, e) => { const xx=Float32Array.from(x); chunks.push({ e, x: xx, clip: levelChunk(xx) }); };
+if(window.__beaconTest) window.__feed = (x, e) => { const xx=Float32Array.from(x); chunks.push({ e, x: xx, clip: levelChunk(xx) }); showLive(xx); };
 
 // ── Input level ──────────────────────────────────────────────────────
 // The level of the audio arriving from the QMX, in dB below the largest value
@@ -1581,7 +1626,7 @@ function tickedBands(){ return BEACON_BANDS.map((_,i)=>i).filter(i=>$('bb'+i).ch
 function startMonitor(){
   const bands = tickedBands();
   if($('mode').value==='sweep' && !bands.length){ alert('Tick at least one band.'); return; }
-  monitoring=true; lastSlotN=null; pendingSlots=[]; updateToneMsg(); updateTiming();
+  monitoring=true; lastSlotN=null; pendingSlots=[]; sweepDone=0; sweepElapsed=0; updateToneMsg(); updateTiming();
   $('startBtn').disabled=true; $('stopBtn').disabled=false;
   if($('mode').value==='stay') tuneTo(parseInt($('stayBand').value,10));
   else { sweepQueue = bands.slice(); tuneTo(sweepQueue[0]); }
@@ -1596,7 +1641,20 @@ function nextSweepBand(){
   const i=bands.indexOf(curBandIdx);
   return bands[(i+1)%bands.length];
 }
-let retunedThisCycle=false;
+// Sweep: each band is kept until all 18 of its beacons have had a measured
+// slot (sweepDone, counted in finishSlot), then the next band is tuned. The
+// retune costs the slot during which it happens, so a visit is 19 slots
+// (3 min 10 s). Changing band at a fixed point of the 3-minute cycle instead
+// would lose the same two beacons on every visit to a band, every time.
+// sweepElapsed is a backstop: a band the radio won't tune to, or one where
+// slots keep failing, is left after 24 slots (4 minutes).
+let sweepDone=0, sweepElapsed=0;
+const SWEEP_SLOTS=18, SWEEP_MAX_SLOTS=24;
+function sweepNext(){
+  sweepDone=0; sweepElapsed=0;
+  const nb=nextSweepBand();
+  if(nb!==curBandIdx) tuneTo(nb);
+}
 function tick(){
   // Windows setting the PC clock (a time sync) moves Date.now but not
   // performance.now. Keep the audio already buffered on the new clock and
@@ -1614,17 +1672,12 @@ function tick(){
   $('clockPill').textContent='UTC '+new Date(now).toISOString().slice(11,19);
   $('slotBar').style.width=(s.inSlot*10).toFixed(1)+'%';
 
-  // Sweep: retune just after slot 17's analysis window closes (9.6 s), so no
-  // measured slot straddles a band change.
-  if($('mode').value==='sweep' && s.slot===17 && s.inSlot>=9.62 && !retunedThisCycle){
-    retunedThisCycle=true; tuneTo(nextSweepBand());
-  }
-  if(s.slot===0) retunedThisCycle=false;
-  if(s.slot!==17 && s.inSlot>=9.65) checkFreq(slotN);
+  if(s.inSlot>=9.65 && !tuneBusy) checkFreq(slotN);
 
   if(lastSlotN===null || slotN>lastSlotN){
     lastSlotN=slotN;
     if(curBandIdx!==null) pendingSlots.push({ n:slotN, slot:s.slot, band:curBandIdx, startMs:s.startMs, tunedAt:tuneAtEpoch });
+    if($('mode').value==='sweep' && ++sweepElapsed>SWEEP_MAX_SLOTS) sweepNext();
   }
   // Analyse a slot once its audio has certainly arrived
   while(pendingSlots.length && now >= pendingSlots[0].startMs + 10300){
@@ -1646,7 +1699,7 @@ const median=a=>{ const s=a.slice().sort((x,y)=>x-y); return s[Math.floor(s.leng
 // Nothing learned from earlier slots: each slot is judged on its own.
 function listenOpts(){
   const o={ pitch: parseInt($('pitch').value,10)||700 };
-  const nt=activeTones().map(q=>q.f).filter(f=>Math.abs(f-o.pitch)<=130);
+  const nt=activeTones().map(q=>q.f).filter(f=>Math.abs(f-o.pitch)<=230);
   if(nt.length) o.notch=nt;
   return o;
 }
@@ -1662,6 +1715,9 @@ async function finishSlot(ps){
   const x = new Float32Array(n); let o=0; for(const c of use){ x.set(c.x,o); o+=c.x.length; }
   const span = (use[use.length-1].e + 128 - use[0].e)/1000;
   if(n < 0.97*span*8000 || span < 10.5) return;       // audio dropped out, or not enough of it
+  // Sweep: this slot's audio is now in hand, so retuning cannot touch it.
+  // Once every beacon on this band has had its slot, move to the next band.
+  if(monitoring && $('mode').value==='sweep' && ps.band===curBandIdx && ++sweepDone>=SWEEP_SLOTS) sweepNext();
   const bi = beaconAt(ps.band, ps.slot), b=BEACONS[bi];
   const clipped = use.reduce((a,c)=>a+(c.clip||0),0);   // samples at or above -1 dBFS in this slot
   // stacking key: this beacon on this band. A clipped slot is not kept for stacking.
@@ -1707,7 +1763,7 @@ function updateTones(found){
   updateToneMsg();
 }
 function updateToneMsg(){
-  const a=activeTones().filter(q=>Math.abs(q.f-(parseInt($('pitch').value,10)||700))<=130);
+  const a=activeTones().filter(q=>Math.abs(q.f-(parseInt($('pitch').value,10)||700))<=230);
   $('toneMsg').textContent = a.length
     ? `Steady tone${a.length>1?'s':''} removed: ${a.map(q=>q.f.toFixed(1)+' Hz').join(', ')}. On all the time and far narrower than a beacon (a birdie or a whistle from the PC), so ${a.length>1?'they are':'it is'} taken out before listening.`
     : (monitoring ? 'No steady tones (birdies) near the pitch.' : '');

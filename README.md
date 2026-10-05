@@ -1,8 +1,5 @@
 # QMX Beacon Monitor
 
-
-**Open it:** https://sparks72.github.io/qmx-beacon-monitor/
-
 A browser tool that listens to the **NCDXF/IARU International Beacon Project** with a QRP Labs **QMX**, tunes the radio by CAT, and shows which of the 18 beacons you hear on 20, 17, 15, 12 and 10 m, and how strongly. It works down into the noise: a beacon too weak for one 10-second transmission can still be found by **stacking** several of its cycles.
 
 One HTML file, nothing to install. Open it in Chrome or Edge.
@@ -37,7 +34,7 @@ One HTML file, nothing to install. Open it in Chrome or Edge.
 ## Requirements
 
 - QRP Labs **QMX** connected by USB, giving the USB sound card and the CAT serial port.
-- **Chrome or Edge** on a PC. Web Serial and Web Audio are needed; Firefox has no Web Serial.
+- **Chrome or Edge** on a PC. Web Serial and Web Audio are needed. A recent Firefox has also been seen working on Linux; older Firefox versions have no Web Serial.
 - An accurate PC clock. Windows: *Settings → Time & language → Sync now*. If WSJT-X shows DT near 0, the clock is fine.
 
 CAT is optional. Without it, tune the radio yourself and use **Stay on one band**.
@@ -48,17 +45,17 @@ CAT is optional. Without it, tune the radio yourself and use **Stay on one band*
 2. **Start audio** and pick the QMX's audio input.
 3. **Connect CAT** and pick the QMX's COM port. Close WSJT-X or any other program using that port first: Windows lets only one program open it.
 4. Optional: **Detect bands** reads the QMX's band configuration (read-only) and ticks the beacon bands your radio covers.
-5. Enter your **locator**, and set **CW pitch** to the same value as the QMX's CW pitch (sidetone). The detector searches ±100 Hz around it.
+5. Enter your **locator**, and set **CW pitch** to the same value as the QMX's CW pitch (sidetone). The detector searches ±200 Hz around it, so a pitch or calibration a little off still works.
 6. Set **Volume** so the level meter stays out of the red and the CLIP light stays off. On the QMX, Volume also sets the level sent to the PC.
 7. Choose a mode, then **Start monitoring**:
    - **Stay on one band:** each beacon comes round every 3 minutes. This is the best choice for stacking.
-   - **Sweep ticked bands:** 3 minutes per band.
+   - **Sweep ticked bands:** each band in turn, for a full round of all 18 beacons. A visit takes 3 min 10 s: the extra 10 s slot is used for retuning, so no beacon is skipped.
 
 The first stacked results need a few cycles, so give it 10–15 minutes.
 
 ## How a beacon counts as heard
 
-Each beacon sends its callsign at 22 WPM and 100 W, then four 1-second dashes at 100 W, 10 W, 1 W and 0.1 W. The schedule says which beacon to expect, so the program **checks for that callsign** rather than decoding Morse. It slides the callsign's on/off pattern across the slot, at every tone within ±100 Hz of the pitch and every start time from 0.5 s early to 0.7 s late. Using the whole callsign at once is far more sensitive than copying it letter by letter.
+Each beacon sends its callsign at 22 WPM and 100 W, then four 1-second dashes at 100 W, 10 W, 1 W and 0.1 W. The schedule says which beacon to expect, so the program **checks for that callsign** rather than decoding Morse. It slides the callsign's on/off pattern across the slot, at every tone within ±200 Hz of the pitch and every start time from 0.5 s early to 0.7 s late. Using the whole callsign at once is far more sensitive than copying it letter by letter.
 
 A slot counts as a catch only if all of these hold:
 
@@ -90,6 +87,8 @@ From simulated steady beacons in noise, with and without pops and clicks:
 | −24 dB | 0% | about 10% within 8 cycles |
 
 Fading beacons gain less, but still clearly.
+
+**Strong beacons** are caught too, including after the receiver's AGC has turned the gain down to hold the level steady. In simulation, every beacon from −10 to +30 dB passed through an AGC was caught. Only the very loudest, around +30 dB with a very fast AGC or driven far into clipping, can still be missed, so keep the CLIP light off.
 
 In the same tests, noise, clicks, AGC pumping, birdies, other CW and wrong beacons produced no false catches in thousands of slots and stacks. Real bands are rougher than simulated noise, so treat a single catch right at the limit with some caution. A catch you can trust repeats, and shows the same tone offset as other catches on that band.
 
