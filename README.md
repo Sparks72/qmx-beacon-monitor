@@ -1,6 +1,7 @@
 # QMX Beacon Monitor
 
 
+
 **Open it:** https://sparks72.github.io/qmx-beacon-monitor/
 
 A browser tool that listens to the **NCDXF/IARU International Beacon Project** with a QRP Labs **QMX**, tunes the radio by CAT, and shows which of the 18 beacons you hear on 20, 17, 15, 12 and 10 m, and how strongly. It works down into the noise: a beacon too weak for one 10-second transmission can still be found by **stacking** several of its cycles.
