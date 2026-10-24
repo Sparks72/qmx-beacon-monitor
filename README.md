@@ -129,7 +129,8 @@ In the same tests, noise, clicks, AGC pumping, birdies, other CW and wrong beaco
 - **CLIP light or "Audio CLIPPING":** turn Volume down. Slots recorded while clipping are marked and are not used for stacking.
 - **All catches show a similar tone offset**, e.g. −60 Hz: set the monitor's CW pitch to match the QMX's. If the offset grows with frequency, the QMX's frequency calibration is off.
 - **Clock:** callsigns are looked for from 0.5 s early to 0.7 s late, so keep the PC clock synced.
-- **Reset grid** empties the grid but keeps the log and Catches list. **Clear results** deletes everything.
+- **Old catches:** the grid and map show only catches from the time chosen under the map (**Show catches from the last … hour** to start with), so beacons that stop being heard drop off by themselves and yesterday's catches are gone when you start next morning. A cell whose last catch is in the older half of that time is shown faded. Choose **any time (until Reset grid)** to keep everything as before.
+- **Reset grid** empties the grid and map now, but keeps the log and Catches list. **Clear results** deletes everything.
 
 ## Privacy
 

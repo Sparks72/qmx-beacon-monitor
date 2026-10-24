@@ -242,7 +242,7 @@ canvas#map{width:100%;display:block;margin:0 auto;border-radius:6px}
     <div id="cellInfo" class="hint">Click a cell for its details.</div>
     <div class="legend">
       <span class="gmiss">not heard</span><span class="gweak">below −18 dB</span><span class="gmid">−18 to −11 dB</span><span class="ggood">above −11 dB</span>
-      <span>— number = SNR of the 100 W dash in 2.5 kHz (dB, as WSJT-X and WSPR give it); ×N = found by stacking N cycles; the weakest dash heard is in the details. Blank = not tried yet. Click a cell for details. Each cell keeps its strongest catch until you press Reset grid; a new catch replaces it only if it is as strong or stronger.</span>
+      <span>— number = SNR of the 100 W dash in 2.5 kHz (dB, as WSJT-X and WSPR give it); ×N = found by stacking N cycles; the weakest dash heard is in the details. Blank = not tried yet. Click a cell for details. Each cell shows its strongest catch within the time chosen under the map (1 hour to start with); older catches drop off by themselves, and a cell whose last catch is getting old is shown faded.</span>
     </div>
   </div>
 
@@ -262,6 +262,11 @@ canvas#map{width:100%;display:block;margin:0 auto;border-radius:6px}
     <div class="hint" id="mapHint"></div>
     <div class="row" style="margin-top:10px">
       <button id="csvBtn" class="ghost">Export CSV</button>
+      <label for="ageSel" style="margin:0">Show catches from the last</label>
+      <select id="ageSel" title="Older catches drop off the grid and the map by themselves, so they follow the band as it changes. The log, the Catches list and the CSV export keep everything.">
+        <option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60" selected>hour</option>
+        <option value="180">3 hours</option><option value="720">12 hours</option><option value="0">any time (until Reset grid)</option>
+      </select>
       <button id="resetGridBtn" class="ghost" title="Empty the grid and start afresh. The log, the Catches list and the CSV export are kept.">Reset grid</button>
       <button id="clearBtn" class="ghost" title="Delete everything: grid, log and catches.">Clear results</button>
       <span class="hint" id="logCount" style="margin:0"></span>
@@ -1192,7 +1197,7 @@ function saveState(){
       locator:$('locator').value, pitch:$('pitch').value, offset:$('offset').value,
       mode:$('mode').value, stay:$('stayBand').value, mapView:$('mapView').value,
       ticks: BEACON_BANDS.map((_,i)=>$('bb'+i).checked),
-      results, log: log.slice(-5000), tones, volAffects, volTestAt, gridResetAt
+      results, log: log.slice(-5000), tones, volAffects, volTestAt, gridResetAt, ageMin
     }));
   }catch(e){}
 }
@@ -1210,6 +1215,7 @@ function loadState(){
     // Grid results from earlier versions of the detector are not shown: it could
     // take noise for beacons. (They stay in the log, so in the CSV export.)
     gridResetAt = s.gridResetAt || 0;
+    if(s.ageMin!==undefined && $('ageSel').querySelector(`option[value="${s.ageMin}"]`)){ ageMin=+s.ageMin; $('ageSel').value=String(ageMin); }
     results={}; log.filter(r=>r && r.det===2).forEach(storeResult);   // rebuilt from the log, so a catch from the last hour is shown again
     if(s.volAffects===true || s.volAffects===false){ volAffects=s.volAffects; volTestAt=s.volTestAt||null;
       $('volTestMsg').textContent = 'Last check'+(volTestAt?' ('+new Date(volTestAt).toISOString().slice(0,10)+')':'')+': Volume '+(volAffects?'changes':'does not change')+' the PC level. Click the button to check again.'; }
@@ -1804,19 +1810,36 @@ let pickedCell=null;
 // weaker catches and misses only update "times heard" and "latest try".
 // Cells are copies, so the log keeps every result exactly as it came.
 let gridResetAt = 0;                   // results before this are not shown in the grid
+// Ageing: the grid and map show only catches from the last ageMin minutes
+// (0 = keep until Reset grid). Rebuilt from the log at every redraw, so a
+// beacon that stops being heard drops off by itself and a page opened the
+// next morning starts clean. The log itself keeps everything.
+let ageMin = 60;
+function applyAgeing(){
+  if(!ageMin) return;
+  const cut = Math.max(gridResetAt, nowUtc() - ageMin*60000);
+  results = {};
+  log.forEach(r => { if(r && r.det===2 && r.ts >= cut) storeResult(r); });
+}
+// faded = the newest time it was heard is in the older half of the window
+function isFading(r, now){
+  if(!ageMin || !r || !r.heard) return false;
+  return now - (r.lastHeard || r.ts) > ageMin*60000/2;
+}
 function storeResult(rec){
   if(rec.ts < gridResetAt) return;
   const key=rec.beacon+'|'+rec.band, prev=results[key];
   if(prev && prev.heard){
     const times = (prev.timesHeard||1) + (rec.heard?1:0);
+    const lastHeard = rec.heard ? Math.max(rec.ts, prev.lastHeard||prev.ts) : (prev.lastHeard||prev.ts);
     if(rec.heard && (rec.snr??-99) >= (prev.snr??-99)){
-      results[key]=Object.assign({}, rec, { timesHeard: times, firstHeard: prev.firstHeard||prev.ts });
+      results[key]=Object.assign({}, rec, { timesHeard: times, firstHeard: prev.firstHeard||prev.ts, lastHeard });
     } else {
-      prev.timesHeard=times; prev.lastTry=rec.ts; prev.lastTryHeard=!!rec.heard;
+      prev.timesHeard=times; prev.lastTry=rec.ts; prev.lastTryHeard=!!rec.heard; prev.lastHeard=lastHeard;
     }
     return;
   }
-  results[key]=Object.assign({}, rec, rec.heard ? { timesHeard:1, firstHeard:rec.ts } : {});
+  results[key]=Object.assign({}, rec, rec.heard ? { timesHeard:1, firstHeard:rec.ts, lastHeard:rec.ts } : {});
 }
 function renderCatches(){
   const el=$('catches'); if(!el) return;
@@ -1830,6 +1853,7 @@ function renderCatches(){
 
 // ── Heat grid ────────────────────────────────────────────────────────
 function renderHeat(curBeacon){
+  applyAgeing();
   const me=locToLatLon($('locator').value);
   const now=nowUtc();
   // Which frequency each beacon is on RIGHT NOW: at any moment five beacons
@@ -1847,16 +1871,17 @@ function renderHeat(curBeacon){
     BEACON_BANDS.forEach((_,ni)=>{
       const r=results[bi+'|'+ni];
       if(!r){ h+='<td class="c"></td>'; return; }
-      const stale = '';                     // catches are kept as the best so far, not faded
+      const stale = isFading(r, now) ? ' stale' : '';   // last heard in the older half of the window
       const ago = t => { const m=Math.round((now-t)/60000); return m<60 ? m+' min ago' : (m/60).toFixed(m<600?1:0)+' h ago'; };
       const utc = t => new Date(t).toISOString().slice(11,16)+' UTC';
       const tone = (r.tone!==undefined && r.tone!==null) ? ` · tone ${r.tone>=0?'+':''}${r.tone} Hz` : '';
       const tip = (r.heard ? `best catch ${utc(r.ts)} (${ago(r.ts)}): ${r.stacked?`stacked ×${r.stacked}, average `:''}${['','100 W','10 W','1 W','0.1 W'][r.dashes]} dash heard · SNR ${r.snr} dB in 2.5 kHz${tone}${r.letters ? ' · letters '+r.letters : ''}`
                             + ` · heard ${r.timesHeard||1}× since ${utc(r.firstHeard||r.ts)}`
+                            + (r.lastHeard && r.lastHeard !== r.ts ? ` · last heard ${ago(r.lastHeard)}` : '')
                             + (r.lastTry ? ` · latest try ${ago(r.lastTry)}: ${r.lastTryHeard?'heard (weaker)':'not heard'}` : '')
                           : (r.why ? `not heard: ${r.why} · ${ago(r.ts)}` : r.qrm ? `not heard: another signal was on the frequency · ${ago(r.ts)}` : `not heard · ${ago(r.ts)}`))
                   + (r.clip ? ' · audio was clipping' : '');
-      h+= r.heard ? `<td class="c ${snrClass(r)}" title="${tip}">${r.snr}${r.stacked?`<sup class="stk">×${r.stacked}</sup>`:''}</td>`
+      h+= r.heard ? `<td class="c ${snrClass(r)}${stale}" title="${tip}">${r.snr}${r.stacked?`<sup class="stk">×${r.stacked}</sup>`:''}</td>`
                   : `<td class="c gmiss" title="${tip}">–</td>`;
     });
     h+='</tr>';
@@ -1935,9 +1960,10 @@ function markerStyle(r, now){
   const lvl = r && r.heard ? r.dashes : 0;
   const scale = { gweak:'--g-weak', gmid:'--g-mid', ggood:'--g-good' };
   return { lvl, colour: r ? (lvl ? cssVar(scale[snrClass(r)]) : cssVar('--map-miss')) : cssVar('--map-none'),
-           alpha: 1 };              // like the grid: the best catch so far, not faded
+           alpha: isFading(r, now) ? 0.45 : 1 };   // like the grid: faded when last heard a while ago
 }
 function renderMap(){
+  applyAgeing();
   const view=$('mapView').value;
   $('mapTitle').textContent = view==='world' ? '— world, night side shaded' : '— centred on you, true bearing and distance';
   $('mapHint').textContent = view==='world'
@@ -2111,7 +2137,8 @@ $('offset').onchange=()=>{ const v=parseFloat($('offset').value)||0, d=v-offsetP
 $('locator').oninput=()=>{ saveState(); renderMap(); renderHeat(-1); };
 $('mapBand').onchange=renderMap;
 $('mapView').onchange=()=>{ saveState(); renderMap(); };
-setInterval(()=>{ if($('mapView').value==='world') renderMap(); }, 60000);   // the night side moves
+$('ageSel').onchange=()=>{ ageMin=+$('ageSel').value; if(!ageMin){ results={}; log.filter(r=>r && r.det===2).forEach(storeResult); } saveState(); renderHeat(-1); renderMap(); };
+setInterval(()=>{ if($('mapView').value==='world' || ageMin) renderMap(); }, 60000);   // the night side moves, old catches drop off
 $('applyOff').onclick=()=>{ const s=parseFloat($('applyOff').dataset.sugg)||0; shiftClock(s, 'Correction applied.'); };
 ['ag','rg'].forEach(w=>{
   const sl=$(w+'Sl');
