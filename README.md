@@ -4,7 +4,7 @@
 
 **Open it:** https://sparks72.github.io/qmx-beacon-monitor/
 
-A browser tool that listens to the **NCDXF/IARU International Beacon Project** with a QRP Labs **QMX**, tunes the radio by CAT, and shows which of the 18 beacons you hear on 20, 17, 15, 12 and 10 m, and how strongly. It works down into the noise: a beacon too weak for one 10-second transmission can still be found by **stacking** several of its cycles.
+A browser tool that listens to the **NCDXF/IARU International Beacon Project** with a QRP Labs **QMX**, tunes the radio by CAT, and shows which of the 18 beacons you hear on 20, 17, 15, 12 and 10 m, and how strongly. It works down into the noise: a beacon too weak for one 10-second transmission can still be found by **stacking** several of its cycles. It can also **compare two antennas**, beacon by beacon, with a waterfall you can save as a picture.
 
 One HTML file, nothing to install. Open it in Chrome or Edge.
 
@@ -27,6 +27,8 @@ One HTML file, nothing to install. Open it in Chrome or Edge.
 
   The number is the SNR of the 100 W dash in 2.5 kHz, the same scale as WSJT-X and WSPR. Click a cell for details: time, weakest dash heard (100 W / 10 W / 1 W / 0.1 W), tone, letters confirmed, how often heard, latest try.
 - **Map.** A world map with the night side shaded, or centred on you with bearing and distance. Shows the best of all bands or one band.
+- **Waterfall.** The last 3 minutes of audio around your CW pitch: one full beacon cycle. Each 10 s slot is labelled with the beacon due and its SNR, and a strip along the bottom shows which antenna was in use. **Pause** holds the picture; **Save picture** saves it as a PNG with the time, band and antenna written on it.
+- **Antenna comparison.** Name the antenna in use, swap, name the next one, and the page compares them: how often each heard every beacon and its average SNR, and the overall difference in dB, worked out only from beacons heard on both. See [Comparing antennas](#comparing-antennas) below.
 - **Catches list and CSV export.** Every beacon heard, newest first, plus a full log for spreadsheets.
 - **Levels panel.**
   - A level meter for the audio arriving at the PC, with a **CLIP** light and a warning in the header.
@@ -51,11 +53,24 @@ CAT is optional. Without it, tune the radio yourself and use **Stay on one band*
 4. Optional: **Detect bands** reads the QMX's band configuration (read-only) and ticks the beacon bands your radio covers.
 5. Enter your **locator**, and set **CW pitch** to the same value as the QMX's CW pitch (sidetone). The detector searches ±200 Hz around it, so a pitch or calibration a little off still works.
 6. Set **Volume** so the level meter stays out of the red and the CLIP light stays off. On the QMX, Volume also sets the level sent to the PC.
-7. Choose a mode, then **Start monitoring**:
-   - **Stay on one band:** each beacon comes round every 3 minutes. This is the best choice for stacking.
+7. Optional: type a name under **Antenna in use**, e.g. `Loop`, so your results are labelled with it.
+8. Choose a mode, then **Start monitoring**:
+   - **Stay on one band:** each beacon comes round every 3 minutes. This is the best choice for stacking and for comparing antennas.
    - **Sweep ticked bands:** each band in turn, for a full round of all 18 beacons. A visit takes 3 min 10 s: the extra 10 s slot is used for retuning, so no beacon is skipped.
 
 The first stacked results need a few cycles, so give it 10–15 minutes.
+
+## Comparing antennas
+
+1. Choose **Stay on one band**, type the first antenna's name under **Antenna in use** and press Enter.
+2. Monitor for at least one 3-minute cycle.
+3. Swap the antenna, type its name and press Enter.
+4. Swap back and forth every 3 minutes or so, a few times over. Conditions change from minute to minute, so alternating is fairer than one long run on each.
+5. Read the result under **Antenna comparison**, e.g. *"Loop is 3.1 dB better than 2.5 m wire: the average over 16 beacons heard on both (give or take 0.4 dB)"*, with a table per beacon and band. **Export comparison CSV** saves it.
+
+The slot in progress when you change the name is skipped, and stacking starts again, so no result mixes two antennas. Full details, including how to read the figures and the waterfall: **[ANTENNA-COMPARISON.md](ANTENNA-COMPARISON.md)**.
+
+The beacons are on 20–10 m only, so the comparison tells you how the antennas do on those bands.
 
 ## How a beacon counts as heard
 
@@ -121,20 +136,23 @@ In the same tests, noise, clicks, AGC pumping, birdies, other CW and wrong beaco
 | `clipped_samples` | Samples at or above −1 dBFS in the slot |
 | `stacked_cycles` | Cycles stacked for this catch |
 | `stacked_reason` | Why a stack was not counted |
+| `antenna` | Antenna name in use when the slot began (blank if none was set) |
+
+The comparison has its own export; its columns are listed in [ANTENNA-COMPARISON.md](ANTENNA-COMPARISON.md).
 
 ## Tips and troubleshooting
 
 - **Nothing heard at all?** Listen at 14.100 by ear, or check WSJT-X on 14.074. If it decodes few stations, the aerial is the limit, not the software. A few metres of wire outside makes a big difference.
 - **Radio not on the beacon frequency?** The CAT pill shows the frequency the QMX reports. If it says "QMX on …, not …", check that band in the QMX's band configuration (**Detect bands** shows them).
 - **CLIP light or "Audio CLIPPING":** turn Volume down. Slots recorded while clipping are marked and are not used for stacking.
-- **All catches show a similar tone offset**, e.g. −60 Hz: set the monitor's CW pitch to match the QMX's. If the offset grows with frequency, the QMX's frequency calibration is off.
+- **All catches show a similar tone offset**, e.g. −60 Hz: set the monitor's CW pitch to match the QMX's. If the offset grows with frequency, the QMX's frequency calibration is off. The waterfall shows it too: the beacons sit above or below the pitch line.
 - **Clock:** callsigns are looked for from 0.5 s early to 0.7 s late, so keep the PC clock synced.
 - **Old catches:** the grid and map show only catches from the time chosen under the map (**Show catches from the last … hour** to start with), so beacons that stop being heard drop off by themselves and yesterday's catches are gone when you start next morning. A cell whose last catch is in the older half of that time is shown faded. Choose **any time (until Reset grid)** to keep everything as before.
-- **Reset grid** empties the grid and map now, but keeps the log and Catches list. **Clear results** deletes everything.
+- **Reset grid** empties the grid and map now, but keeps the log and Catches list. **Clear results** deletes everything, including the antenna comparison.
 
 ## Privacy
 
-Everything runs in your browser. Audio, results and settings stay on your PC (browser storage). Nothing is sent anywhere.
+Everything runs in your browser. Audio, results and settings stay on your PC (browser storage). Nothing is sent anywhere. Saved waterfall pictures go to your Downloads folder.
 
 ## Credits
 

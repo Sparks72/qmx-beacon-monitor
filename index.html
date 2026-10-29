@@ -121,6 +121,17 @@ table.heat td.picked{outline:2px solid var(--accent);outline-offset:-2px}
 #catches .row1{display:grid;grid-template-columns:5.2em 5.6em 3.6em 5.4em 4.4em 1fr;gap:6px;padding:2px 4px;border-bottom:1px solid var(--border)}
 pre#catLog{font-family:ui-monospace,monospace;font-size:.72rem;line-height:1.45;background:var(--well);border:1px solid var(--border);border-radius:5px;padding:6px 8px;max-height:230px;overflow:auto;white-space:pre-wrap;color:var(--text)}
 canvas#map{width:100%;display:block;margin:0 auto;border-radius:6px}
+/* waterfall and antenna comparison */
+canvas#wf{width:100%;display:block;border-radius:6px;background:#05070b}
+table.cmp{border-collapse:collapse;width:100%;font-size:.78rem}
+table.cmp th{font-weight:600;color:var(--text2);padding:4px 6px;text-align:right;font-size:.72rem;white-space:nowrap}
+table.cmp th:first-child,table.cmp th:nth-child(2),table.cmp td:first-child,table.cmp td:nth-child(2){text-align:left}
+table.cmp td{padding:3px 6px;border-top:1px solid var(--border);text-align:right;white-space:nowrap}
+table.cmp td.up{color:var(--green);font-weight:600} table.cmp td.dn{color:var(--red);font-weight:600}
+table.cmp tr.tot td{font-weight:600;border-top:2px solid var(--border)}
+#cmpSummary{font-size:.86rem;color:var(--text);line-height:1.5;margin:4px 0 10px}
+#cmpSummary b.up{color:var(--green)} #cmpSummary b.dn{color:var(--red)}
+.antdot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;vertical-align:-1px}
 </style>
 </head>
 <body>
@@ -228,12 +239,45 @@ canvas#map{width:100%;display:block;margin:0 auto;border-radius:6px}
       <div><div class="big" id="nowBeacon">—</div><div class="sub" id="nowLoc">beacon</div></div>
       <div><div class="big mono" id="nowPath">—</div><div class="sub">bearing · distance</div></div>
       <div style="flex:1;min-width:160px">
-        <div class="sub">tone near pitch (±200 Hz)</div>
+        <div class="sub">tone near pitch (±200 Hz): <span class="mono" id="lvlNum">—</span></div>
         <div class="lvl"><div id="lvlBar"></div></div>
       </div>
     </div>
     <div class="bar"><div id="slotBar"></div></div>
     <div class="hint" id="lastResult">Last result: —</div>
+  </div>
+
+  <div class="panel">
+    <h2>Waterfall</h2>
+    <div class="row"><label for="antName">Antenna in use</label>
+      <input type="text" id="antName" list="antList" maxlength="24" placeholder="e.g. Loop, 2.5 m wire">
+      <datalist id="antList"></datalist></div>
+    <canvas id="wf" width="1407" height="366"></canvas>
+    <div class="row" style="margin-top:10px">
+      <label for="wfSpan" style="min-width:auto">Width</label>
+      <select id="wfSpan" style="flex:0 1 auto">
+        <option value="250">±250 Hz around the pitch</option>
+        <option value="1000">±1000 Hz around the pitch</option>
+      </select>
+      <button id="wfPause" class="ghost">Pause</button>
+      <button id="wfSave" class="ghost">Save picture</button>
+      <span class="hint" id="wfMsg" style="margin:0"></span>
+    </div>
+    <div class="hint">The last 3 minutes of audio, newest on the right. That is one full beacon cycle: with “Stay on one band”, every beacon is on it once. Colour = dB above the noise in each 4 Hz strip, so a change of antenna that brings up the noise as much as the signal looks the same, just as the SNR does. Above each 10 s slot is the beacon due and, once analysed, its SNR. The strip at the bottom shows which antenna was in use. <b>Save picture</b> saves the waterfall as a PNG with the time, band and antenna written on it.</div>
+  </div>
+
+  <div class="panel">
+    <h2>Antenna comparison</h2>
+    <div class="row"><label for="cmpA">Compare</label>
+      <select id="cmpA"></select><span style="color:var(--text2)">with</span><select id="cmpB"></select></div>
+    <div class="row"><label for="cmpAge">Over the last</label>
+      <select id="cmpAge">
+        <option value="60">hour</option><option value="180" selected>3 hours</option><option value="720">12 hours</option><option value="1440">24 hours</option><option value="0">any time</option>
+      </select></div>
+    <div id="cmpSummary">Type a name under “Antenna in use” above, monitor for a while, then change to the other antenna and its name.</div>
+    <div style="overflow-x:auto"><table class="cmp" id="cmpTable"></table></div>
+    <div class="row" style="margin-top:10px"><button id="cmpCsv" class="ghost">Export comparison CSV</button></div>
+    <div class="hint">Every result is saved with the antenna name in use when its slot began. When you change the name, the slot in progress is skipped and stacking starts again, so the moment of swapping doesn't count for either. Conditions change from minute to minute, so for a fair test use “Stay on one band” and swap every 3 minutes or so, a few times over. The difference is worked out only from beacons heard on both antennas, each beacon against itself, so a strong beacon heard on one antenna only does not sway it; “heard” shows how often each antenna caught it out of its tries. SNR is that of the 100 W dash in 2.5 kHz.</div>
   </div>
 
   <div class="panel">
@@ -1197,7 +1241,8 @@ function saveState(){
       locator:$('locator').value, pitch:$('pitch').value, offset:$('offset').value,
       mode:$('mode').value, stay:$('stayBand').value, mapView:$('mapView').value,
       ticks: BEACON_BANDS.map((_,i)=>$('bb'+i).checked),
-      results, log: log.slice(-5000), tones, volAffects, volTestAt, gridResetAt, ageMin
+      results, log: log.slice(-5000), tones, volAffects, volTestAt, gridResetAt, ageMin,
+      ant:$('antName').value, antChangedAt, wfSpan:$('wfSpan').value, cmpAge:$('cmpAge').value, cmpA:cmpPick.a, cmpB:cmpPick.b
     }));
   }catch(e){}
 }
@@ -1210,6 +1255,11 @@ function loadState(){
     if(s.mode) $('mode').value=s.mode;
     if(s.stay!==undefined) $('stayBand').value=s.stay;
     if(s.mapView==='world' || s.mapView==='azi') $('mapView').value=s.mapView;
+    if(typeof s.ant==='string') $('antName').value=s.ant;
+    if(s.antChangedAt) antChangedAt=s.antChangedAt;
+    if(s.wfSpan==='250' || s.wfSpan==='1000') $('wfSpan').value=s.wfSpan;
+    if(s.cmpAge!==undefined && $('cmpAge').querySelector(`option[value="${s.cmpAge}"]`)) $('cmpAge').value=String(s.cmpAge);
+    cmpPick={ a:s.cmpA||'', b:s.cmpB||'' };
     if(Array.isArray(s.ticks)) s.ticks.forEach((v,i)=>{ const e=$('bb'+i); if(e) e.checked=!!v; });
     log=s.log||[];
     // Grid results from earlier versions of the detector are not shown: it could
@@ -1553,6 +1603,7 @@ function onAudio(e){
   const cutoff = epochNow - 25000;
   while(chunks.length && chunks[0].e < cutoff) chunks.shift();
   showLive(x);
+  wfAdd(x, epochNow + (at-ts.contextTime)*1000);
 }
 // Live meter: the strongest tone within +-200 Hz of the pitch (the range the
 // detector searches, since beacons often arrive off the pitch), in dB over the
@@ -1575,10 +1626,11 @@ function showLive(x){
   const db=Math.max(0, 10*Math.log10((pw[pw.length-1]+1e-20)/(pw[pw.length>>1]+1e-20)) - LIVE_NOISE_DB);
   liveDisp = db>liveDisp ? liveDisp+0.6*(db-liveDisp) : liveDisp+0.08*(db-liveDisp);   // fast up, slow down
   $('lvlBar').style.width = Math.min(100, liveDisp/LIVE_FULL_DB*100).toFixed(1)+'%';
+  $('lvlNum').textContent = liveDisp.toFixed(0)+' dB';
   $('lvlBar').parentElement.title = `Strongest tone within ±200 Hz of the pitch: ${liveDisp.toFixed(0)} dB above the noise`;
 }
 // For automated tests only: audio pushed in directly, with the epoch time of its first sample.
-if(window.__beaconTest) window.__feed = (x, e) => { const xx=Float32Array.from(x); chunks.push({ e, x: xx, clip: levelChunk(xx) }); showLive(xx); };
+if(window.__beaconTest) window.__feed = (x, e) => { const xx=Float32Array.from(x); chunks.push({ e, x: xx, clip: levelChunk(xx) }); showLive(xx); wfAdd(xx, e); };
 
 // ── Input level ──────────────────────────────────────────────────────
 // The level of the audio arriving from the QMX, in dB below the largest value
@@ -1668,7 +1720,7 @@ function tick(){
   const wd=Date.now()-performance.now();
   if(wallRef!==null && Math.abs(wd-wallRef)>250){
     const j=wd-wallRef;
-    chunks.forEach(c=>c.e+=j); tuneAtEpoch+=j; onsets=[]; resetStacks();
+    chunks.forEach(c=>c.e+=j); wfCols.forEach(c=>c.e+=j); tuneAtEpoch+=j; onsets=[]; resetStacks();
     timingNote=`The PC clock was just set ${j>0?'forward':'back'} by ${(Math.abs(j)/1000).toFixed(2)} s.`;
     updateTiming();
   }
@@ -1682,7 +1734,7 @@ function tick(){
 
   if(lastSlotN===null || slotN>lastSlotN){
     lastSlotN=slotN;
-    if(curBandIdx!==null) pendingSlots.push({ n:slotN, slot:s.slot, band:curBandIdx, startMs:s.startMs, tunedAt:tuneAtEpoch });
+    if(curBandIdx!==null) pendingSlots.push({ n:slotN, slot:s.slot, band:curBandIdx, startMs:s.startMs, tunedAt:tuneAtEpoch, ant:curAnt() });
     if($('mode').value==='sweep' && ++sweepElapsed>SWEEP_MAX_SLOTS) sweepNext();
   }
   // Analyse a slot once its audio has certainly arrived
@@ -1711,6 +1763,7 @@ function listenOpts(){
 }
 async function finishSlot(ps){
   if(ps.tunedAt > ps.startMs - 800) return;           // band changed during this window
+  if(antChangedAt >= ps.startMs - 1000 && antChangedAt <= ps.startMs + 9900){ wfNote(ps.startMs, 'antenna changed'); return; }   // antenna swapped during this window
   // with CAT: only while the radio is confirmed on this beacon frequency since before the window
   if(port && !(tuneVerified && tuneVerified.band===ps.band && tuneVerified.at <= ps.startMs - 1000)) return;
   // the slot's audio from 1.0 s before it starts to 9.9 s into it, 8 kHz
@@ -1737,7 +1790,7 @@ async function finishSlot(ps){
   const stacked = (r.heard && r.stacked) ? r.stacked : 0;
   const rec = { ts:ps.startMs, beacon:bi, band:ps.band, heard:r.heard, snr:r.snr, dashes:r.dashes, onset:r.onset,
                 tone:r.df, z:r.z, zr:r.zr, rival:r.rival, why:r.why||null, letters:r.letters||null, qrm: !!single.interference && !r.heard, bw:2500, det:2, clip: clipped,
-                stacked, stackWhy: (!r.heard && res.rs && res.rs.stacked>=2) ? (res.rs.why||'stacked: callsign too weak') : null };
+                stacked, stackWhy: (!r.heard && res.rs && res.rs.stacked>=2) ? (res.rs.why||'stacked: callsign too weak') : null, ant: ps.ant||'' };
   storeResult(rec); log.push(rec); renderCatches();
   // callsign start times of beacons heard, for the clock check (display only)
   if(r.heard && !stacked){ onsets.push(r.onset); if(onsets.length>20) onsets.shift(); updateTiming(); }
@@ -1746,7 +1799,7 @@ async function finishSlot(ps){
     (r.heard ? `heard${stacked?` by stacking the last ${stacked} cycles`:''}: callsign (letters confirmed: ${r.letters||'?'}) and the 100 W dash, weakest dash ${pw}, SNR ${r.snr} dB${stacked?' (average)':''}, tone ${r.df>=0?'+':''}${r.df} Hz from pitch`
              : 'not heard' + (r.why ? ` (${r.why})` : r.interference ? ' (another signal was on the frequency)' : ''))
     + (clipped ? ' — the audio was clipping during this slot, so this result is less reliable' : '');
-  saveState(); renderMap(); updateCount();
+  saveState(); renderMap(); updateCount(); renderCmp();
 }
 // ── Steady tones ─────────────────────────────────────────────────────
 // A tone that is on for whole slots at one strength and a fraction of a hertz
@@ -1798,7 +1851,7 @@ function shiftClock(delta, note){
   resetStacks();
   const cur=parseFloat($('offset').value)||0;
   $('offset').value=(cur+delta).toFixed(2); offsetPrev=parseFloat($('offset').value)||0;
-  chunks.forEach(c=>c.e+=delta*1000); tuneAtEpoch+=delta*1000;
+  chunks.forEach(c=>c.e+=delta*1000); wfCols.forEach(c=>c.e+=delta*1000); tuneAtEpoch+=delta*1000;
   onsets=[]; timingNote=note||''; saveState(); updateTiming();
 }
 let offsetPrev=0;
@@ -1847,7 +1900,7 @@ function renderCatches(){
   if(!c.length){ el.innerHTML='<div class="hint">None yet.</div>'; return; }
   el.innerHTML=c.map(r=>{
     const d=new Date(r.ts), t=d.toISOString().slice(5,10).replace('-','/')+' '+d.toISOString().slice(11,16);
-    return `<div class="row1"><span>${t}</span><b>${BEACONS[r.beacon].call}</b><span>${BEACON_BANDS[r.band].m} m</span><span>${r.snr} dB</span><span>${['','100 W','10 W','1 W','0.1 W'][r.dashes]}</span><span>${r.stacked?'stacked ×'+r.stacked+' · ':''}${r.letters?'letters '+r.letters:''}${r.tone!==null&&r.tone!==undefined?' · tone '+(r.tone>=0?'+':'')+r.tone+' Hz':''}${r.clip?' · clipping':''}</span></div>`;
+    return `<div class="row1"><span>${t}</span><b>${BEACONS[r.beacon].call}</b><span>${BEACON_BANDS[r.band].m} m</span><span>${r.snr} dB</span><span>${['','100 W','10 W','1 W','0.1 W'][r.dashes]}</span><span>${r.stacked?'stacked ×'+r.stacked+' · ':''}${r.letters?'letters '+r.letters:''}${r.tone!==null&&r.tone!==undefined?' · tone '+(r.tone>=0?'+':'')+r.tone+' Hz':''}${r.clip?' · clipping':''}${r.ant?' · '+esc(r.ant):''}</span></div>`;
   }).join('');
 }
 
@@ -2102,15 +2155,275 @@ function renderAzimuthal(){
 function updateCount(){ $('logCount').textContent = log.length+' results logged'; }
 
 function exportCsv(){
-  const rows=[['utc','band_m','freq_mhz','beacon','location','heard','weakest_dash','snr_db_2500hz','onset_s','tone_hz','score','best_other_callsign','its_score','reason','other_signal','clipped_samples','stacked_cycles','stacked_reason']];
+  const rows=[['utc','band_m','freq_mhz','beacon','location','heard','weakest_dash','snr_db_2500hz','onset_s','tone_hz','score','best_other_callsign','its_score','reason','other_signal','clipped_samples','stacked_cycles','stacked_reason','antenna']];
   log.forEach(r=>rows.push([ new Date(r.ts).toISOString(), BEACON_BANDS[r.band].m, (BEACON_BANDS[r.band].hz/1e6).toFixed(3),
     BEACONS[r.beacon].call, '"'+BEACONS[r.beacon].loc+'"', r.heard?1:0,
     r.heard?['','100W','10W','1W','0.1W'][r.dashes]:'', r.snr===null||r.snr===undefined?'':r.snr, r.onset===null||r.onset===undefined?'':r.onset,
-    r.tone===null||r.tone===undefined?'':r.tone, r.z===undefined?'':r.z, r.rival||'', r.zr===undefined?'':r.zr, r.why?'"'+r.why+'"':'', r.qrm?1:0, r.clip===undefined?'':r.clip, r.stacked||'', r.stackWhy?'"'+r.stackWhy+'"':'' ]));
+    r.tone===null||r.tone===undefined?'':r.tone, r.z===undefined?'':r.z, r.rival||'', r.zr===undefined?'':r.zr, r.why?'"'+r.why+'"':'', r.qrm?1:0, r.clip===undefined?'':r.clip, r.stacked||'', r.stackWhy?'"'+r.stackWhy+'"':'', csvQ(r.ant||'') ]));
   const blob=new Blob([rows.map(r=>r.join(',')).join('\n')],{type:'text/csv'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
   a.download='beacon-log-'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
 }
+
+// ── Antenna name ─────────────────────────────────────────────────────
+// Every slot is labelled with the antenna name in use when it began. When
+// the name changes, the slot in progress is skipped and the stacks start
+// again, so no result mixes the two antennas.
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+const csvQ = s => s ? '"'+String(s).replace(/"/g,'""')+'"' : '';
+let antChangedAt = 0, antPrev = null, cmpPick = { a:'', b:'' };
+const curAnt = () => $('antName').value.trim();
+const ANT_COLOURS = ['#4ea1ff','#f0a23e','#3fb950','#d36ad6','#e5534b','#2fc6c6'];
+function antColour(name){
+  if(!name) return '#4a5566';
+  const used = antennasInLog(); if(!used.includes(name)) used.push(name);
+  return ANT_COLOURS[used.slice().sort().indexOf(name) % ANT_COLOURS.length];
+}
+// antennas named in the log, most recently used last
+function antennasInLog(){
+  const last = new Map();
+  log.forEach(r => { if(r && r.ant) last.set(r.ant, r.ts); });
+  return [...last.entries()].sort((a,b) => a[1]-b[1]).map(e => e[0]);
+}
+function antennaChanged(){
+  const a = curAnt();
+  if(a === antPrev) return;
+  antPrev = a; antChangedAt = nowUtc(); resetStacks();
+  saveState(); fillAntLists(); renderCmp(); wfDraw();
+}
+function fillAntLists(){
+  const ants = antennasInLog(), cur = curAnt();
+  $('antList').innerHTML = ants.map(a => `<option value="${esc(a)}">`).join('');
+  const all = ants.slice(); if(cur && !all.includes(cur)) all.push(cur);
+  // default: B = the antenna in use (or used last), A = the one before it
+  const defB = cur || all[all.length-1] || '', defA = all.filter(a => a !== defB).pop() || '';
+  let a = all.includes(cmpPick.a) ? cmpPick.a : defA, b = all.includes(cmpPick.b) ? cmpPick.b : defB;
+  if(a === b){ a = defA; b = defB; }
+  const opts = sel => all.length ? all.map(n => `<option value="${esc(n)}"${n===sel?' selected':''}>${esc(n)}</option>`).join('') : '<option value="">— none yet —</option>';
+  $('cmpA').innerHTML = opts(a); $('cmpB').innerHTML = opts(b);
+}
+
+// ── Antenna comparison ───────────────────────────────────────────────
+// Per beacon and band: how often each antenna heard it, and its average SNR
+// (100 W dash, 2.5 kHz). The overall difference is the average of B - A over
+// the beacons heard on BOTH, each beacon compared with itself, so a strong
+// beacon that only one antenna happened to catch does not sway it.
+function cmpData(){
+  const A = $('cmpA').value, B = $('cmpB').value, age = +$('cmpAge').value;
+  const cut = age ? nowUtc() - age*60000 : 0;
+  const g = new Map();
+  for(const r of log){
+    if(!r || r.det!==2 || r.ts < cut || !r.ant || (r.ant!==A && r.ant!==B)) continue;
+    const k = r.band+'|'+r.beacon;
+    if(!g.has(k)) g.set(k, { band:r.band, beacon:r.beacon, a:{ tries:0, snrs:[] }, b:{ tries:0, snrs:[] } });
+    const s = g.get(k)[r.ant===A ? 'a' : 'b'];
+    s.tries++; if(r.heard && r.snr!==null && r.snr!==undefined) s.snrs.push(r.snr);
+  }
+  const mean = v => v.length ? v.reduce((x,y)=>x+y,0)/v.length : null;
+  const rows = [...g.values()].filter(q => q.a.tries && q.b.tries)
+    .sort((p,q) => p.band-q.band || p.beacon-q.beacon)
+    .map(q => { const ma = mean(q.a.snrs), mb = mean(q.b.snrs); return Object.assign(q, { ma, mb, d: (ma!==null && mb!==null) ? mb-ma : null }); });
+  const ds = rows.filter(q => q.d!==null).map(q => q.d);
+  const tot = rows.reduce((t,q) => ({ at:t.at+q.a.tries, ah:t.ah+q.a.snrs.length, bt:t.bt+q.b.tries, bh:t.bh+q.b.snrs.length }), { at:0, ah:0, bt:0, bh:0 });
+  let avg = null, se = null;
+  if(ds.length){ avg = mean(ds); if(ds.length>1){ const v = ds.reduce((x,d)=>x+(d-avg)**2,0)/(ds.length-1); se = Math.sqrt(v/ds.length); } }
+  return { A, B, rows, ds, avg, se, tot };
+}
+function renderCmp(){
+  const sum = $('cmpSummary'), tb = $('cmpTable');
+  const { A, B, rows, ds, avg, se, tot } = cmpData();
+  if(!A || !B || A===B){
+    tb.innerHTML = '';
+    sum.innerHTML = antennasInLog().length < 2
+      ? 'Type a name under “Antenna in use” above, monitor for a while, then change to the other antenna and its name.'
+      : 'Pick two different antennas to compare.';
+    return;
+  }
+  const pct = (h,t) => t ? Math.round(100*h/t)+'%' : '—';
+  const f1 = v => v===null ? '—' : (v>0?'+':'')+v.toFixed(1);
+  const sA = esc(A), sB = esc(B);
+  if(!rows.length){ tb.innerHTML=''; sum.innerHTML = `No beacon has been tried on both <b>${sA}</b> and <b>${sB}</b> in this period yet.`; return; }
+  let msg;
+  if(avg===null) msg = `No beacon heard on both antennas yet, so no SNR difference.`;
+  else {
+    const cls = Math.abs(avg) < 0.5 ? '' : avg>0 ? 'up' : 'dn';
+    const word = Math.abs(avg) < 0.5 ? `about the same as` : avg>0 ? `better than` : `worse than`;
+    msg = `<b>${sB}</b> is <b class="${cls}">${Math.abs(avg) < 0.5 ? f1(avg)+' dB,' : Math.abs(avg).toFixed(1)+' dB'}</b> ${word} <b>${sA}</b>: the average over ${ds.length} beacon${ds.length>1?'s':''} heard on both`
+        + (se!==null ? ` (give or take ${se.toFixed(1)} dB)` : '')
+        + (ds.length < 3 ? '. Too few beacons to go by yet.' : '.');
+  }
+  msg += `<br>Heard: <b>${sB}</b> ${tot.bh} of ${tot.bt} tries (${pct(tot.bh,tot.bt)}), <b>${sA}</b> ${tot.ah} of ${tot.at} (${pct(tot.ah,tot.at)}), on the ${rows.length} beacon/band pair${rows.length>1?'s':''} both have tried.`;
+  sum.innerHTML = msg;
+  const dot = n => `<span class="antdot" style="background:${antColour(n)}"></span>`;
+  let h = `<tr><th>Beacon</th><th>Band</th><th>${dot(A)}${sA}: heard</th><th>SNR</th><th>${dot(B)}${sB}: heard</th><th>SNR</th><th>${sB} − ${sA}</th></tr>`;
+  const cell = s => s.snrs.length ? (s.snrs.reduce((x,y)=>x+y,0)/s.snrs.length).toFixed(1) : '–';
+  for(const q of rows){
+    const dc = q.d===null ? '' : q.d >= 0.5 ? 'up' : q.d <= -0.5 ? 'dn' : '';
+    h += `<tr><td class="mono"><b>${BEACONS[q.beacon].call}</b></td><td class="mono">${BEACON_BANDS[q.band].m} m</td>`
+       + `<td>${q.a.snrs.length} / ${q.a.tries}</td><td class="mono">${cell(q.a)}</td>`
+       + `<td>${q.b.snrs.length} / ${q.b.tries}</td><td class="mono">${cell(q.b)}</td>`
+       + `<td class="mono ${dc}">${q.d===null ? '–' : f1(q.d)}</td></tr>`;
+  }
+  h += `<tr class="tot"><td>All</td><td></td><td>${tot.ah} / ${tot.at}</td><td></td><td>${tot.bh} / ${tot.bt}</td><td></td><td class="mono ${avg===null?'':avg>=0.5?'up':avg<=-0.5?'dn':''}">${avg===null?'–':f1(avg)}</td></tr>`;
+  tb.innerHTML = h;
+}
+function exportCmpCsv(){
+  const { A, B, rows, avg, se } = cmpData();
+  if(!rows.length){ alert('Nothing to compare yet.'); return; }
+  const out = [['beacon','band_m','antenna_a','a_heard','a_tries','a_snr_db','antenna_b','b_heard','b_tries','b_snr_db','b_minus_a_db']];
+  const m = v => v===null ? '' : v.toFixed(1);
+  rows.forEach(q => out.push([BEACONS[q.beacon].call, BEACON_BANDS[q.band].m, csvQ(A), q.a.snrs.length, q.a.tries, m(q.ma), csvQ(B), q.b.snrs.length, q.b.tries, m(q.mb), m(q.d)]));
+  out.push(['ALL','',csvQ(A),'','','',csvQ(B),'','','', m(avg)+(se!==null?' (+-'+se.toFixed(1)+')':'')]);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([out.map(r=>r.join(',')).join('\n')], { type:'text/csv' }));
+  a.download = 'antenna-comparison-'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
+}
+
+// ── Waterfall ────────────────────────────────────────────────────────
+// One column per 1024-sample block (128 ms), so the 1407-pixel picture holds
+// 180 s: one full beacon cycle. Each column is a 2048-sample Hann window (this
+// block and the one before) evaluated at 4 Hz steps (±250 Hz) or 8 Hz steps
+// (±1000 Hz) around the pitch. Colour is dB above a slowly-followed noise
+// floor (the median strip), so it shows what SNR shows.
+const WF_W = 1407, WF_TOP = 50, WF_SPEC = 256, WF_BOT = 60, WF_COL_MS = 128;
+const WF_HANN = Float64Array.from({ length:2048 }, (_,i) => 0.5-0.5*Math.cos(2*Math.PI*(i+0.5)/2048));
+const WF_LO = -3, WF_HI = 30;                 // colour scale, dB above the noise
+let wfCols = [], wfPrevX = null, wfNoise = null, wfPaused = false, wfOff = null, wfNotes = new Map(), wfLastDraw = 0;
+const WF_LUT = (() => {
+  const st = [[0,[5,7,11]],[.18,[12,30,80]],[.38,[20,96,170]],[.56,[30,180,160]],[.72,[232,212,58]],[.87,[240,102,42]],[1,[255,255,255]]];
+  const lut = new Uint8ClampedArray(256*3);
+  for(let i=0;i<256;i++){
+    const t = i/255; let k = 0; while(k < st.length-2 && t > st[k+1][0]) k++;
+    const [t0,c0] = st[k], [t1,c1] = st[k+1], u = (t-t0)/(t1-t0);
+    for(let j=0;j<3;j++) lut[i*3+j] = c0[j] + u*(c1[j]-c0[j]);
+  }
+  return lut;
+})();
+function wfOffCanvas(){
+  if(!wfOff){ wfOff = document.createElement('canvas'); wfOff.width = WF_W; wfOff.height = WF_SPEC;
+    const g = wfOff.getContext('2d'); g.fillStyle = '#05070b'; g.fillRect(0,0,WF_W,WF_SPEC); }
+  return wfOff;
+}
+function wfClear(){ wfCols = []; wfOff = null; wfNoise = null; wfPrevX = null; wfDraw(); }
+function wfAdd(x, e){
+  const prev = wfPrevX; wfPrevX = x;
+  if(!prev || prev.length!==1024 || x.length!==1024) return;
+  const span = +$('wfSpan').value || 250, step = span===250 ? 8000/2048 : 8000/1024;
+  const nb = Math.round(2*span/step), pitch = parseInt($('pitch').value,10) || 700;
+  const w = new Float64Array(2048);
+  for(let i=0;i<1024;i++){ w[i] = prev[i]*WF_HANN[i]; w[1024+i] = x[i]*WF_HANN[1024+i]; }
+  const p = new Float64Array(nb);
+  for(let k=0;k<nb;k++){
+    const c = 2*Math.cos(2*Math.PI*(pitch - span + (k+0.5)*step)/8000); let s1=0, s2=0;
+    for(let i=0;i<2048;i++){ const s0 = w[i] + c*s1 - s2; s2 = s1; s1 = s0; }
+    p[k] = 10*Math.log10(Math.max(1e-20, s1*s1 + s2*s2 - c*s1*s2));
+  }
+  const med = Float64Array.from(p).sort()[nb>>1];
+  wfNoise = wfNoise===null ? med : wfNoise + 0.04*(med - wfNoise);   // follows the noise over ~3 s
+  // scroll the picture one pixel left and paint the new column on the right
+  const off = wfOffCanvas(), g = off.getContext('2d');
+  g.drawImage(off, -1, 0);
+  const img = g.createImageData(1, WF_SPEC), rowsPer = WF_SPEC/nb;
+  for(let y=0;y<WF_SPEC;y++){
+    const k = nb-1-Math.floor(y/rowsPer);                    // high tones at the top
+    const t = Math.max(0, Math.min(255, Math.round((p[k]-wfNoise-WF_LO)/(WF_HI-WF_LO)*255)));
+    img.data[y*4] = WF_LUT[t*3]; img.data[y*4+1] = WF_LUT[t*3+1]; img.data[y*4+2] = WF_LUT[t*3+2]; img.data[y*4+3] = 255;
+  }
+  g.putImageData(img, WF_W-1, 0);
+  wfCols.push({ e, band: monitoring ? curBandIdx : null, ant: curAnt(), span, pitch });
+  if(wfCols.length > WF_W) wfCols.splice(0, wfCols.length - WF_W);
+  const t = performance.now();
+  if(!wfPaused && t - wfLastDraw > 120){ wfLastDraw = t; wfDraw(); }
+}
+function wfNote(slotMs, text){ wfNotes.set(slotMs, text); if(wfNotes.size > 60) wfNotes.delete(wfNotes.keys().next().value); }
+function wfDraw(){
+  const cv = $('wf'); if(!cv) return;
+  const g = cv.getContext('2d'), H = cv.height;
+  g.fillStyle = '#0b0f15'; g.fillRect(0, 0, WF_W, H);
+  g.drawImage(wfOffCanvas(), 0, WF_TOP);
+  const last = wfCols[wfCols.length-1];
+  const font = (px, bold) => (bold?'600 ':'')+px+'px ui-monospace,"JetBrains Mono",Consolas,monospace';
+  const title = (txt, x, align, col) => { g.font = font(13, true); g.textAlign = align; g.fillStyle = col||'#d8e0ea'; g.fillText(txt, x, 16); };
+  const span = last ? last.span : (+$('wfSpan').value||250), pitch = last ? last.pitch : (parseInt($('pitch').value,10)||700);
+  const tNow = last ? last.e : nowUtc();
+  const loc = ($('locator').value||'').toUpperCase();
+  title('QMX Beacon Monitor'+(loc?' · '+loc:'')+' · '+new Date(tNow).toISOString().slice(0,19).replace('T',' ')+' UTC', 8, 'left');
+  const bandTxt = last && last.band!==null ? BEACON_BANDS[last.band].m+' m '+(BEACON_BANDS[last.band].hz/1e6).toFixed(3)+' MHz · ' : '';
+  title(bandTxt+'antenna: '+(curAnt()||'(no name)')+(wfPaused?' · PAUSED':''), WF_W-8, 'right', wfPaused ? '#f0a23e' : '#d8e0ea');
+  // frequency guides: the pitch line, and the edges
+  const yOf = df => WF_TOP + (span - df)/(2*span)*WF_SPEC;
+  g.strokeStyle = 'rgba(255,255,255,.22)'; g.setLineDash([2,4]); g.beginPath(); g.moveTo(0, yOf(0)+.5); g.lineTo(WF_W, yOf(0)+.5); g.stroke(); g.setLineDash([]);
+  g.font = font(11); g.textAlign = 'left';
+  const tag = (txt, y) => { const w = g.measureText(txt).width; g.fillStyle = 'rgba(11,15,21,.75)'; g.fillRect(3, y-11, w+8, 15); g.fillStyle = '#aab7c8'; g.fillText(txt, 7, y); };
+  tag('+'+span+' Hz', WF_TOP+14); tag(pitch+' Hz', yOf(0)-4); tag('−'+span+' Hz', WF_TOP+WF_SPEC-5);
+  if(!wfCols.length){
+    g.font = font(13); g.textAlign = 'center'; g.fillStyle = '#8b9bb0';
+    g.fillText(ctx ? 'Waiting for audio…' : 'Start audio to see the waterfall', WF_W/2, WF_TOP+WF_SPEC/2);
+    return;
+  }
+  const xOf = t => WF_W-1 - (tNow - t)/WF_COL_MS;
+  const tOld = tNow - WF_W*WF_COL_MS;
+  // results of the slots in view, by slot start time
+  const recs = new Map();
+  for(let i=log.length-1; i>=0 && log[i].ts >= tOld-10000; i--) if(!recs.has(log[i].ts)) recs.set(log[i].ts, log[i]);
+  const colAt = t => wfCols[Math.max(0, Math.min(wfCols.length-1, wfCols.length-1 - Math.round((tNow - t)/WF_COL_MS)))];
+  const snrCol = s => s < -18 ? '#e7a6a8' : s <= -11 ? '#f0a23e' : '#5fd47a';
+  for(let s = Math.floor(tOld/10000)*10000; s <= tNow; s += 10000){
+    const x0 = xOf(s), xm = xOf(s+5000);
+    if(x0 >= xOf(wfCols[0].e)){ g.strokeStyle = 'rgba(255,255,255,.28)'; g.beginPath(); g.moveTo(Math.round(x0)+.5, WF_TOP-14); g.lineTo(Math.round(x0)+.5, WF_TOP+WF_SPEC); g.stroke(); }
+    if(xm < 30 || xm > WF_W-30 || s+5000 < wfCols[0].e) continue;
+    const c = colAt(s+5000); if(!c || c.band===null) continue;
+    const bi = beaconAt(c.band, slotOf(s+5000).slot);
+    g.textAlign = 'center'; g.font = font(11, true); g.fillStyle = '#d8e0ea'; g.fillText(BEACONS[bi].call, xm, WF_TOP-20);
+    const r = recs.get(s), note = wfNotes.get(s);
+    let txt, col = '#8b9bb0';
+    if(r && r.band===c.band){ if(r.heard){ txt = r.snr+' dB'+(r.stacked?' ×'+r.stacked:''); col = snrCol(r.snr); } else txt = '–'; }
+    else if(note) txt = note==='antenna changed' ? 'swap' : note;
+    else txt = tNow - s < 11000 ? '…' : '';
+    g.font = font(11); g.fillStyle = col; g.fillText(txt, xm, WF_TOP-6);
+  }
+  // antenna strip
+  const ya = WF_TOP + WF_SPEC + 4;
+  let i0 = 0;
+  for(let i=1; i<=wfCols.length; i++){
+    if(i < wfCols.length && wfCols[i].ant === wfCols[i0].ant) continue;
+    const xa = Math.max(0, xOf(wfCols[i0].e)), xb = xOf(wfCols[i-1].e)+1, name = wfCols[i0].ant;
+    g.fillStyle = antColour(name); g.globalAlpha = .85; g.fillRect(xa, ya, xb-xa, 14); g.globalAlpha = 1;
+    g.font = font(11, true); g.textAlign = 'left'; g.fillStyle = '#05070b';
+    const lab = name || '(no name)';
+    if(xb - xa > g.measureText(lab).width + 8){ g.save(); g.beginPath(); g.rect(xa, ya, xb-xa, 14); g.clip(); g.fillText(lab, xa+4, ya+11); g.restore(); }
+    i0 = i;
+  }
+  // time axis, every 30 s
+  g.font = font(11); g.fillStyle = '#8b9bb0'; g.strokeStyle = 'rgba(255,255,255,.3)';
+  for(let s = Math.ceil(tOld/30000)*30000; s <= tNow; s += 30000){
+    const x = Math.round(xOf(s))+.5; if(x < 0) continue;
+    g.beginPath(); g.moveTo(x, ya+15); g.lineTo(x, ya+20); g.stroke();
+    g.textAlign = x < 40 ? 'left' : x > WF_W-40 ? 'right' : 'center';
+    g.fillText(new Date(s).toISOString().slice(11,19), x, ya+30);
+  }
+  // colour key
+  const kx = WF_W-8-150, ky = H-4;
+  for(let i=0;i<150;i++){ const t = Math.round(i/149*255); g.fillStyle = `rgb(${WF_LUT[t*3]},${WF_LUT[t*3+1]},${WF_LUT[t*3+2]})`; g.fillRect(kx+i, ky-8, 1, 8); }
+  g.textAlign = 'right'; g.fillStyle = '#8b9bb0'; g.fillText(WF_LO+' to +'+WF_HI+' dB over noise', kx-6, ky);
+}
+function wfSave(){
+  wfDraw();   // make sure the picture is current (or the paused one)
+  const a = document.createElement('a');
+  const ant = (curAnt()||'antenna').replace(/[^A-Za-z0-9._-]+/g,'-');
+  a.download = 'beacon-waterfall-'+ant+'-'+new Date(wfCols.length ? wfCols[wfCols.length-1].e : Date.now()).toISOString().slice(0,19).replace(/[:T]/g,'-')+'.png';
+  a.href = $('wf').toDataURL('image/png'); a.click();
+  $('wfMsg').textContent = 'Saved '+a.download;
+}
+$('antName').addEventListener('change', antennaChanged);
+$('antName').addEventListener('keydown', e => { if(e.key==='Enter') $('antName').blur(); });
+$('wfSpan').onchange = () => { saveState(); wfClear(); };
+$('wfPause').onclick = () => { wfPaused = !wfPaused; $('wfPause').textContent = wfPaused ? 'Resume' : 'Pause'; $('wfMsg').textContent = wfPaused ? 'Paused: the picture is held, the monitor keeps running.' : ''; wfDraw(); };
+$('wfSave').onclick = wfSave;
+['cmpA','cmpB'].forEach(id => $(id).onchange = () => { cmpPick = { a:$('cmpA').value, b:$('cmpB').value }; saveState(); renderCmp(); });
+$('cmpAge').onchange = () => { saveState(); renderCmp(); };
+$('cmpCsv').onclick = exportCmpCsv;
+$('pitch').addEventListener('change', wfClear);
 
 // ── Theme ────────────────────────────────────────────────────────────
 function applyTheme(t){
@@ -2159,8 +2472,9 @@ $('heat').addEventListener('click', e=>{
 $('csvBtn').onclick=exportCsv;
 $('resetGridBtn').onclick=()=>{ if(confirm('Empty the grid and start afresh?\n\nThe log, the Catches list and the CSV export are kept.')){ gridResetAt=Date.now(); results={}; pickedCell=null; $('cellInfo').textContent='Click a cell for its details.'; saveState(); renderHeat(-1); renderMap(); } };
 $('catLogCopy').onclick=async()=>{ try{ await navigator.clipboard.writeText(catLog.join('\n')); $('catLogMsg').textContent='Copied — paste it into the chat.'; }catch(e){ $('catLogMsg').textContent='Copy not allowed here; a screenshot works too.'; } };
-$('clearBtn').onclick=()=>{ if(confirm('Clear all beacon results?')){ results={}; log=[]; onsets=[]; tones=[]; gridResetAt=0; resetStacks(); updateToneMsg(); saveState(); renderHeat(-1); renderMap(); updateCount(); renderCatches(); } };
+$('clearBtn').onclick=()=>{ if(confirm('Clear all beacon results?')){ results={}; log=[]; onsets=[]; tones=[]; gridResetAt=0; resetStacks(); updateToneMsg(); saveState(); renderHeat(-1); renderMap(); updateCount(); renderCatches(); fillAntLists(); renderCmp(); wfDraw(); } };
 renderHeat(-1); renderMap(); updateCount(); renderCatches();
+antPrev=curAnt(); fillAntLists(); renderCmp(); wfDraw();
 let lastIdleSlot=null;
 setInterval(()=>{
   if(monitoring) return;
