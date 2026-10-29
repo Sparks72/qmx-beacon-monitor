@@ -35,6 +35,7 @@ One HTML file, nothing to install. Open it in Chrome or Edge.
   - Volume and RF gain controls for the QMX, with ±1 dB buttons, and a readout of how much the AGC is turning the gain down.
 - **Clock check.** It shows where the callsigns start relative to the slot and suggests a correction if your PC clock is off. Nothing changes until you click it.
 - **CAT log** of every command sent and every reply, for troubleshooting.
+- **Listen on PC** If you want to hear the signal
 - Light and dark theme.
 
 ## Requirements
