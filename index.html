@@ -1324,11 +1324,12 @@ async function readLevels(){
   if(!port || lvBusy) return;
   lvBusy=true;
   try{
-    const ag=await catQuery('AG;', true, 400, true);
+    // the first read after connecting is written to the CAT log, so a radio that doesn't answer can be seen there
+    const ag=await catQuery('AG;', true, 400, lv.agOk!==null);
     if(ag!==null){ const d=ag.slice(2); lv.ag=parseInt(d.length>=4 ? d.slice(1) : d,10); lv.agOk=isFinite(lv.ag); } else if(lv.agOk===null) lv.agOk=false;
-    const rg=await catQuery('RG;', true, 400, true);
+    const rg=await catQuery('RG;', true, 400, lv.rgOk!==null);
     if(rg!==null){ lv.rg=num(rg,2); lv.rgOk=lv.rg!==null; } else if(lv.rgOk===null) lv.rgOk=false;
-    const sa=await catQuery('SA;', true, 400, true);
+    const sa=await catQuery('SA;', true, 400, lv.saOk!==null);
     if(sa!==null){ lv.sa=num(sa,2); lv.saOk=lv.sa!==null; } else if(lv.saOk===null) lv.saOk=false;
   } finally { lvBusy=false; }
   showLevels();
@@ -1347,6 +1348,8 @@ function showLevels(){
   $('agcVal').textContent = !on ? 'AGC: —' : lv.saOk===false ? 'AGC reading: not available on this firmware'
     : lv.sa===null ? 'AGC: …' : (lv.sa>0.5 ? `AGC: turning the gain down by ${lv.sa} dB` : 'AGC: not reducing the gain');
   $('volTest').disabled = !(on && lv.agOk && ctx) || volTestRunning;
+  $('volTest').title = $('volTest').disabled && !volTestRunning
+    ? (!on ? 'Needs CAT: connect CAT first.' : !lv.agOk ? 'Needs the Volume (AG) reading over CAT, and this radio is not answering it: see the CAT log.' : 'Needs audio: click Start audio first.') : '';
   if(on && (lv.agOk===false || lv.rgOk===false) && !volTestRunning)
     $('volTestMsg').textContent = 'This QMX firmware does not answer '+[lv.agOk===false?'AG (Volume)':null, lv.rgOk===false?'RG (RF gain)':null].filter(Boolean).join(' or ')+' over CAT; set it on the radio instead.';
 }
