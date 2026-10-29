@@ -193,6 +193,10 @@ table.cmp tr.tot td{font-weight:600;border-top:2px solid var(--border)}
         <button class="ghost" id="rgUp" title="1 dB up">+</button>
         <span class="mono val" id="rgVal">—</span></div>
       <div class="hint mono" id="agcVal" style="margin-top:0">AGC: —</div>
+      <div class="ctlrow" style="margin-top:10px"><label for="lsnOn" style="min-width:auto;display:flex;align-items:center;gap:6px;color:var(--text)"><input type="checkbox" id="lsnOn"> Listen on PC</label>
+        <input type="range" id="lsnVol" min="-40" max="6" step="1" value="-12" title="Loudness on the PC speakers">
+        <span class="mono val" id="lsnVal">−12 dB</span></div>
+      <div class="hint" style="margin-top:0">Plays the audio from the QMX on the PC's speakers. It only changes what you hear: the monitor and its readings are not affected.</div>
       <div class="row" style="margin-top:8px"><button class="ghost" id="volTest" disabled>Does Volume change the PC level?</button></div>
       <div class="hint" id="volTestMsg">On the QMX, Volume sets the level to the PC as well as the headphones, so use Volume to keep the CLIP light off. The controls work once CAT is connected; each − / + is 1 dB, and the Volume slider goes no more than 20 dB above where it is now, so a slip can't blast your headphones.</div>
     </div>
@@ -1251,7 +1255,7 @@ function saveState(){
       mode:$('mode').value, stay:$('stayBand').value, mapView:$('mapView').value,
       ticks: BEACON_BANDS.map((_,i)=>$('bb'+i).checked),
       results, log: log.slice(-5000), tones, volAffects, volTestAt, gridResetAt, ageMin,
-      ant:$('antName').value, antChangedAt, wfSpan:$('wfSpan').value, cmpAge:$('cmpAge').value, cmpA:cmpPick.a, cmpB:cmpPick.b
+      ant:$('antName').value, antChangedAt, lsnVol:$('lsnVol').value, wfSpan:$('wfSpan').value, cmpAge:$('cmpAge').value, cmpA:cmpPick.a, cmpB:cmpPick.b
     }));
   }catch(e){}
 }
@@ -1265,6 +1269,7 @@ function loadState(){
     if(s.stay!==undefined) $('stayBand').value=s.stay;
     if(s.mapView==='world' || s.mapView==='azi') $('mapView').value=s.mapView;
     if(typeof s.ant==='string') $('antName').value=s.ant;
+    if(s.lsnVol!==undefined) $('lsnVol').value=s.lsnVol;
     if(s.antChangedAt) antChangedAt=s.antChangedAt;
     if(s.wfSpan==='250' || s.wfSpan==='1000') $('wfSpan').value=s.wfSpan;
     if(s.cmpAge!==undefined && $('cmpAge').querySelector(`option[value="${s.cmpAge}"]`)) $('cmpAge').value=String(s.cmpAge);
@@ -1586,6 +1591,8 @@ async function startAudio(){
     node.port.onmessage=onAudio;
     const mute=ctx.createGain(); mute.gain.value=0;   // keep the graph pulling; no monitoring echo
     src.connect(node).connect(mute).connect(ctx.destination);
+    // Listen on PC: a separate path to the speakers, silent unless switched on
+    listenGain=ctx.createGain(); src.connect(listenGain).connect(ctx.destination); setListen();
     setPill('audioPill','on','Audio '+(ctx.sampleRate/1000)+' kHz'); audioPillText='ok';
     lvlHist=[]; peakHold=-120; lastClipT=-1e9; lvlState={ loud:false, quiet:false }; showLevels();
     $('audioBtn').textContent='Stop audio';
@@ -1597,7 +1604,7 @@ function stopAudio(){
   try{ node&&node.disconnect(); }catch(e){}
   if(stream) stream.getTracks().forEach(t=>t.stop());
   if(ctx) ctx.close();
-  node=null; stream=null; ctx=null;
+  node=null; stream=null; ctx=null; listenGain=null;
   setPill('audioPill','off','Audio idle'); $('audioBtn').textContent='Start audio'; $('startBtn').disabled=true;
   audioPillText=''; lvlHist=[]; $('inRms').style.width='0%'; $('inPeak').style.left='0%'; $('clipLamp').classList.remove('on');
   $('inNums').textContent='PC input: —'; $('inAdvice').className='hint'; $('inAdvice').textContent='Start audio to see the level coming in from the QMX.'; showLevels();
@@ -1643,6 +1650,17 @@ function showLive(x){
 }
 // For automated tests only: audio pushed in directly, with the epoch time of its first sample.
 if(window.__beaconTest) window.__feed = (x, e) => { const xx=Float32Array.from(x); chunks.push({ e, x: xx, clip: levelChunk(xx) }); showLive(xx); wfAdd(xx, e); };
+
+// ── Listen on PC ──
+let listenGain=null;
+function setListen(){
+  const on=$('lsnOn').checked, db=+$('lsnVol').value;
+  $('lsnVal').textContent=(db>0?'+':db<0?'−':'')+Math.abs(db)+' dB';
+  $('lsnVol').disabled=!on;
+  if(listenGain && ctx) listenGain.gain.setTargetAtTime(on ? Math.pow(10, db/20) : 0, ctx.currentTime, 0.05);
+}
+$('lsnOn').onchange=()=>{ setListen(); saveState(); };
+$('lsnVol').oninput=setListen; $('lsnVol').onchange=saveState;
 
 // ── Input level ──────────────────────────────────────────────────────
 // The level of the audio arriving from the QMX, in dB below the largest value
@@ -2506,7 +2524,7 @@ $('resetGridBtn').onclick=()=>{ if(confirm('Empty the grid and start afresh?\n\n
 $('catLogCopy').onclick=async()=>{ try{ await navigator.clipboard.writeText(catLog.join('\n')); $('catLogMsg').textContent='Copied — paste it into the chat.'; }catch(e){ $('catLogMsg').textContent='Copy not allowed here; a screenshot works too.'; } };
 $('clearBtn').onclick=()=>{ if(confirm('Clear all beacon results?')){ results={}; log=[]; onsets=[]; tones=[]; gridResetAt=0; resetStacks(); updateToneMsg(); saveState(); renderHeat(-1); renderMap(); updateCount(); renderCatches(); fillAntLists(); renderCmp(); wfDraw(); } };
 renderHeat(-1); renderMap(); updateCount(); renderCatches();
-antPrev=curAnt(); fillAntLists(); renderCmp(); wfDraw(); gridBanner();
+setListen(); antPrev=curAnt(); fillAntLists(); renderCmp(); wfDraw(); gridBanner();
 let lastIdleSlot=null;
 setInterval(()=>{
   if(monitoring) return;
