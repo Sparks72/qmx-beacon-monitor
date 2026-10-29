@@ -131,6 +131,12 @@ table.cmp td.up{color:var(--green);font-weight:600} table.cmp td.dn{color:var(--
 table.cmp tr.tot td{font-weight:600;border-top:2px solid var(--border)}
 #cmpSummary{font-size:.86rem;color:var(--text);line-height:1.5;margin:4px 0 10px}
 #cmpSummary b.up{color:var(--green)} #cmpSummary b.dn{color:var(--red)}
+#heatWrap{position:relative}
+#gridBanner{position:absolute;inset:0;display:none;align-items:center;justify-content:center;pointer-events:none;overflow:hidden}
+#gridBanner.on{display:flex}
+#gridBanner span{transform:rotate(-18deg);font-size:clamp(1.6rem,4.2vw,3.2rem);font-weight:800;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;
+  color:color-mix(in srgb,var(--red) 55%,transparent);border:4px solid color-mix(in srgb,var(--red) 45%,transparent);border-radius:10px;padding:6px 22px;background:color-mix(in srgb,var(--panel) 55%,transparent)}
+#gridBanner.wait span{color:color-mix(in srgb,var(--amber) 70%,transparent);border-color:color-mix(in srgb,var(--amber) 55%,transparent)}
 .antdot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;vertical-align:-1px}
 </style>
 </head>
@@ -282,7 +288,7 @@ table.cmp tr.tot td{font-weight:600;border-top:2px solid var(--border)}
 
   <div class="panel">
     <h2>Propagation grid</h2>
-    <div style="overflow-x:auto"><table class="heat" id="heat"></table></div>
+    <div id="heatWrap"><div style="overflow-x:auto"><table class="heat" id="heat"></table></div><div id="gridBanner"><span></span></div></div>
     <div id="cellInfo" class="hint">Click a cell for its details.</div>
     <div class="legend">
       <span class="gmiss">not heard</span><span class="gweak">below −18 dB</span><span class="gmid">−18 to −11 dB</span><span class="ggood">above −11 dB</span>
@@ -1694,7 +1700,7 @@ function startMonitor(){
   tickTimer = setInterval(tick, 100);
 }
 function stopMonitor(){
-  monitoring=false; clearInterval(tickTimer); tickTimer=null;
+  monitoring=false; clearInterval(tickTimer); tickTimer=null; gridBanner();
   $('startBtn').disabled=!ctx; $('stopBtn').disabled=true;
 }
 function nextSweepBand(){
@@ -1717,6 +1723,7 @@ function sweepNext(){
   if(nb!==curBandIdx) tuneTo(nb);
 }
 function tick(){
+  gridBanner();
   // Windows setting the PC clock (a time sync) moves Date.now but not
   // performance.now. Keep the audio already buffered on the new clock and
   // relearn the callsign timing, which was measured against the old one.
@@ -2168,6 +2175,19 @@ function exportCsv(){
   a.download='beacon-log-'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
 }
 
+// ── Banner across the grid ───────────────────────────────────────────
+// Says plainly why nothing is being added: monitoring is off, or the QMX has
+// not yet confirmed it is on the beacon frequency (nothing is recorded then).
+let bannerText = null;
+function gridBanner(){
+  let txt = '', cls = '';
+  if(!monitoring) txt = log.length ? 'Monitoring stopped' : 'Monitoring not started';
+  else if(port && !(tuneVerified && tuneVerified.band===curBandIdx)){ txt = 'Waiting for the QMX on '+(BEACON_BANDS[curBandIdx].hz/1e6).toFixed(3); cls = 'wait'; }
+  if(txt === bannerText) return;
+  bannerText = txt;
+  const b = $('gridBanner'); b.className = txt ? 'on '+cls : ''; b.firstChild.textContent = txt;
+}
+
 // ── Antenna name ─────────────────────────────────────────────────────
 // Every slot is labelled with the antenna name in use when it began. When
 // the name changes, the slot in progress is skipped and the stacks start
@@ -2477,7 +2497,7 @@ $('resetGridBtn').onclick=()=>{ if(confirm('Empty the grid and start afresh?\n\n
 $('catLogCopy').onclick=async()=>{ try{ await navigator.clipboard.writeText(catLog.join('\n')); $('catLogMsg').textContent='Copied — paste it into the chat.'; }catch(e){ $('catLogMsg').textContent='Copy not allowed here; a screenshot works too.'; } };
 $('clearBtn').onclick=()=>{ if(confirm('Clear all beacon results?')){ results={}; log=[]; onsets=[]; tones=[]; gridResetAt=0; resetStacks(); updateToneMsg(); saveState(); renderHeat(-1); renderMap(); updateCount(); renderCatches(); fillAntLists(); renderCmp(); wfDraw(); } };
 renderHeat(-1); renderMap(); updateCount(); renderCatches();
-antPrev=curAnt(); fillAntLists(); renderCmp(); wfDraw();
+antPrev=curAnt(); fillAntLists(); renderCmp(); wfDraw(); gridBanner();
 let lastIdleSlot=null;
 setInterval(()=>{
   if(monitoring) return;
