@@ -287,7 +287,10 @@ table.cmp tr.tot td{font-weight:600;border-top:2px solid var(--border)}
   </div>
 
   <div class="panel">
-    <h2>Propagation grid</h2>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <h2 style="margin:0">Propagation grid</h2>
+      <div style="display:flex;gap:6px"><button id="startBtn2" disabled>Start monitoring</button><button id="stopBtn2" class="ghost" disabled>Stop</button></div>
+    </div>
     <div id="heatWrap"><div style="overflow-x:auto"><table class="heat" id="heat"></table></div><div id="gridBanner"><span></span></div></div>
     <div id="cellInfo" class="hint">Click a cell for its details.</div>
     <div class="legend">
@@ -2466,6 +2469,12 @@ $('audioBtn').onclick=()=> ctx ? stopAudio() : startAudio();
 $('catBtn').onclick=catConnect; $('catDisc').onclick=catDisconnect;
 $('detectBtn').onclick=detectBands;
 $('startBtn').onclick=startMonitor; $('stopBtn').onclick=stopMonitor;
+// the grid's own Start / Stop: copies of the header buttons, enabled and disabled with them
+[['startBtn','startBtn2'],['stopBtn','stopBtn2']].forEach(([a,b])=>{
+  $(b).onclick=()=>$(a).click();
+  const sync=()=>{ $(b).disabled=$(a).disabled; }; sync();
+  new MutationObserver(sync).observe($(a), { attributes:true, attributeFilter:['disabled'] });
+});
 $('mode').onchange=()=>{ $('stayRow').style.display=$('mode').value==='stay'?'':'none'; saveState(); };
 $('stayBand').onchange=()=>{ saveState(); if(monitoring && $('mode').value==='stay') tuneTo(parseInt($('stayBand').value,10)); };
 $('pitch').onchange=()=>{ saveState(); updateToneMsg(); resetStacks(); };
